@@ -6,6 +6,7 @@ import com.orderflow.repository.*;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import java.math.BigDecimal;
 import java.time.LocalDate;
 import com.orderflow.dto.OrderLineUpdateRequest;
 import java.util.*;
@@ -54,7 +55,11 @@ public class SalesOrderService {
                     .orElseThrow(() -> new RuntimeException("Client product not found: " + lr.getClientProductId()));
             SalesOrderLine line = SalesOrderLine.builder()
                     .salesOrder(order).clientProduct(cp)
-                    .qty(lr.getQty()).unitPrice(lr.getUnitPrice()).spec(lr.getSpec())
+                    .qty(lr.getQty())
+                    .salesQty(normalizeSalesQty(lr.getSalesQty(), lr.getQty()))
+                    .unitPrice(lr.getUnitPrice())
+                    .discount(normalizeDiscount(lr.getDiscount()))
+                    .spec(lr.getSpec())
                     .build();
             order.getLines().add(line);
         }
@@ -113,7 +118,9 @@ public class SalesOrderService {
                 .findFirst()
                 .orElseThrow(() -> new RuntimeException("Line not found: " + lineId));
         if (req.getQty() != null) line.setQty(req.getQty());
+        if (req.getSalesQty() != null) line.setSalesQty(normalizeSalesQty(req.getSalesQty(), line.getQty()));
         if (req.getUnitPrice() != null) line.setUnitPrice(req.getUnitPrice());
+        if (req.getDiscount() != null) line.setDiscount(normalizeDiscount(req.getDiscount()));
         if (req.getSpec() != null) line.setSpec(req.getSpec());
         return mapper.toSalesOrderDto(orderRepo.save(order));
     }
@@ -125,6 +132,17 @@ public class SalesOrderService {
         orderRepo.deleteById(id);
     }
 
-}
+    private Integer normalizeSalesQty(Integer salesQty, Integer orderedQty) {
+        if (salesQty != null && salesQty > 0) return salesQty;
+        return orderedQty != null ? orderedQty : 0;
+    }
 
+    private BigDecimal normalizeDiscount(BigDecimal discount) {
+        if (discount == null) return BigDecimal.ZERO;
+        if (discount.compareTo(BigDecimal.ZERO) < 0) return BigDecimal.ZERO;
+        if (discount.compareTo(BigDecimal.valueOf(100)) > 0) return BigDecimal.valueOf(100);
+        return discount;
+    }
+
+}
 

@@ -59,7 +59,7 @@ public class MapperService {
     public SalesOrderDto toSalesOrderDto(SalesOrder o) {
         Client c = o.getClient();
         BigDecimal subtotal = o.getLines().stream()
-                .map(l -> l.getUnitPrice().multiply(BigDecimal.valueOf(l.getQty())))
+                .map(this::salesOrderLineTaxableAmount)
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
 
         List<SalesOrderLineDto> lineDtos = o.getLines().stream()
@@ -81,13 +81,24 @@ public class MapperService {
         ClientProduct cp = l.getClientProduct();
         Product p = cp.getProduct();
         JobCard jc = l.getJobCard();
+        BigDecimal baseAmount = salesOrderLineBaseAmount(l);
+        BigDecimal discountAmount = salesOrderLineDiscountAmount(l);
+        BigDecimal taxableAmount = baseAmount.subtract(discountAmount);
         return SalesOrderLineDto.builder()
                 .id(l.getId())
                 .clientProductId(cp.getId())
                 .productName(p.getName()).sku(p.getSku())
                 .size(p.getSize()).handle(p.getHandle())
                 .stereoRef(cp.getStereoRef())
-                .qty(l.getQty()).unitPrice(l.getUnitPrice()).spec(l.getSpec())
+                .qty(l.getQty())
+                .orderedQty(l.getQty())
+                .salesQty(resolveSalesQty(l))
+                .unitPrice(l.getUnitPrice())
+                .discount(defaultDiscount(l))
+                .discountAmount(discountAmount)
+                .taxableAmount(taxableAmount)
+                .lineTotal(taxableAmount)
+                .spec(l.getSpec())
                 .jobCardId(jc != null ? jc.getId() : null)
                 .jobCardNo(jc != null ? jc.getJobCardNo() : null)
                 .jobCardStatus(jc != null ? jc.getStatus().name() : null)
@@ -142,18 +153,30 @@ public class MapperService {
             SalesOrderLine ol = l.getOrderLine();
             Product p = ol.getClientProduct().getProduct();
             BigDecimal base = l.getUnitPrice().multiply(BigDecimal.valueOf(l.getQty()));
-            BigDecimal tax = base.multiply(BigDecimal.valueOf(l.getTaxPercent()))
+            BigDecimal discountAmount = base.multiply(defaultDiscount(ol))
+                    .divide(BigDecimal.valueOf(100), 2, RoundingMode.HALF_UP);
+            BigDecimal taxable = base.subtract(discountAmount);
+            BigDecimal tax = taxable.multiply(BigDecimal.valueOf(l.getTaxPercent()))
                     .divide(BigDecimal.valueOf(100), 2, RoundingMode.HALF_UP);
             return InvoiceLineDto.builder()
                     .id(l.getId()).orderLineId(ol.getId())
                     .productName(p.getName()).size(p.getSize()).handle(p.getHandle())
-                    .qty(l.getQty()).unitPrice(l.getUnitPrice())
-                    .taxPercent(l.getTaxPercent()).taxAmount(tax).lineTotal(base.add(tax))
+                    .qty(l.getQty())
+                    .orderedQty(ol.getQty())
+                    .salesQty(resolveSalesQty(ol))
+                    .unitPrice(l.getUnitPrice())
+                    .discount(defaultDiscount(ol))
+                    .discountAmount(discountAmount)
+                    .taxableAmount(taxable)
+                    .taxPercent(l.getTaxPercent()).taxAmount(tax).lineTotal(taxable.add(tax))
                     .build();
         }).collect(Collectors.toList());
 
         BigDecimal subtotal = lineDtos.stream()
-                .map(l -> l.getUnitPrice().multiply(BigDecimal.valueOf(l.getQty())))
+                .map(InvoiceLineDto::getTaxableAmount)
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+        BigDecimal discountTotal = lineDtos.stream()
+                .map(InvoiceLineDto::getDiscountAmount)
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
         BigDecimal taxTotal = lineDtos.stream()
                 .map(InvoiceLineDto::getTaxAmount)
@@ -167,7 +190,7 @@ public class MapperService {
                 .clientGstNo(inv.getClient().getGstNo())
                 .invoiceDate(inv.getInvoiceDate() != null ? inv.getInvoiceDate().toString() : null)
                 .dueDate(inv.getDueDate() != null ? inv.getDueDate().toString() : null)
-                .gstPercent(inv.getGstPercent()).status(inv.getStatus().name())
+                .gstPercent(inv.getGstPercent()).discountTotal(discountTotal).status(inv.getStatus().name())
                 .lines(lineDtos).subtotal(subtotal).taxTotal(taxTotal).total(total)
                 .paidAmount(paid).balanceDue(total.subtract(paid))
                 .build();
@@ -191,5 +214,29 @@ public class MapperService {
                 .status(p.getStatus().name())
                 .allocations(allocDtos)
                 .build();
+    }
+
+    private Integer resolveSalesQty(SalesOrderLine line) {
+        Integer salesQty = line.getSalesQty();
+        if (salesQty != null && salesQty > 0) return salesQty;
+        return line.getQty() != null ? line.getQty() : 0;
+    }
+
+    private BigDecimal defaultDiscount(SalesOrderLine line) {
+        return line.getDiscount() != null ? line.getDiscount() : BigDecimal.ZERO;
+    }
+
+    private BigDecimal salesOrderLineBaseAmount(SalesOrderLine line) {
+        return line.getUnitPrice().multiply(BigDecimal.valueOf(resolveSalesQty(line)));
+    }
+
+    private BigDecimal salesOrderLineDiscountAmount(SalesOrderLine line) {
+        return salesOrderLineBaseAmount(line)
+                .multiply(defaultDiscount(line))
+                .divide(BigDecimal.valueOf(100), 2, RoundingMode.HALF_UP);
+    }
+
+    private BigDecimal salesOrderLineTaxableAmount(SalesOrderLine line) {
+        return salesOrderLineBaseAmount(line).subtract(salesOrderLineDiscountAmount(line));
     }
 }

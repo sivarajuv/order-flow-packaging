@@ -37,8 +37,9 @@ public class InvoiceService {
                 .orElseThrow(() -> new RuntimeException("Order not found: " + req.getOrderId()));
         Client client = order.getClient();
 
-        // GST: use override if provided, else client default
-        int gstPct = req.getGstOverride() != null ? req.getGstOverride() : client.getGstPercent();
+        // GST: preserve an explicit 0% override instead of falling back to defaults.
+        Integer requestedGst = req.getGstOverride();
+        int gstPct = requestedGst == null ? client.getGstPercent() : requestedGst.intValue();
 
         long count = invoiceRepo.count() + 1;
         String invNo = "INV-" + LocalDate.now().getYear() + "-" + String.format("%04d", count);
@@ -52,13 +53,15 @@ public class InvoiceService {
                 .gstPercent(gstPct).status(Invoice.InvoiceStatus.UNPAID)
                 .lines(new ArrayList<>())
                 .build();
+        invoice.setGstPercent(gstPct);
 
         for (SalesOrderLine ol : order.getLines()) {
             InvoiceLine il = InvoiceLine.builder()
                     .invoice(invoice).orderLine(ol)
-                    .qty(ol.getQty()).unitPrice(ol.getUnitPrice())
+                    .qty(resolveInvoiceQty(ol)).unitPrice(ol.getUnitPrice())
                     .taxPercent(gstPct)
                     .build();
+            il.setTaxPercent(gstPct);
             invoice.getLines().add(il);
         }
 
@@ -71,14 +74,29 @@ public class InvoiceService {
         // Update client CY outstanding
         BigDecimal total = saved.getLines().stream().map(l -> {
             BigDecimal base = l.getUnitPrice().multiply(BigDecimal.valueOf(l.getQty()));
-            BigDecimal tax = base.multiply(BigDecimal.valueOf(gstPct))
+            BigDecimal discount = base.multiply(resolveDiscountPercent(l))
                     .divide(BigDecimal.valueOf(100), 2, RoundingMode.HALF_UP);
-            return base.add(tax);
+            BigDecimal taxable = base.subtract(discount);
+            BigDecimal tax = taxable.multiply(BigDecimal.valueOf(gstPct))
+                    .divide(BigDecimal.valueOf(100), 2, RoundingMode.HALF_UP);
+            return taxable.add(tax);
         }).reduce(BigDecimal.ZERO, BigDecimal::add);
 
         client.setCyOutstanding(client.getCyOutstanding().add(total));
         clientRepo.save(client);
 
         return mapper.toInvoiceDto(invoiceRepo.findById(saved.getId()).orElseThrow());
+    }
+
+    private int resolveInvoiceQty(SalesOrderLine orderLine) {
+        Integer salesQty = orderLine.getSalesQty();
+        if (salesQty != null && salesQty > 0) return salesQty;
+        return orderLine.getQty() != null ? orderLine.getQty() : 0;
+    }
+
+    private BigDecimal resolveDiscountPercent(InvoiceLine line) {
+        SalesOrderLine orderLine = line.getOrderLine();
+        if (orderLine == null || orderLine.getDiscount() == null) return BigDecimal.ZERO;
+        return orderLine.getDiscount();
     }
 }

@@ -28,8 +28,7 @@ public class Invoice {
     private LocalDate invoiceDate;
     private LocalDate dueDate;
 
-    @Builder.Default
-    private Integer gstPercent = 18;   // 0, 5, or 18
+    private Integer gstPercent;   // 0, 5, or 18
 
     @Enumerated(EnumType.STRING)
     @Builder.Default

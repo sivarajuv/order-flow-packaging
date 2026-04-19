@@ -9,7 +9,12 @@ public class InvoiceLineDto {
     private String size;
     private String handle;
     private Integer qty;
+    private Integer orderedQty;
+    private Integer salesQty;
     private BigDecimal unitPrice;
+    private BigDecimal discount;
+    private BigDecimal discountAmount;
+    private BigDecimal taxableAmount;
     private Integer taxPercent;
     private BigDecimal taxAmount;
     private BigDecimal lineTotal;

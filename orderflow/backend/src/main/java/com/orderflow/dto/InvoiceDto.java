@@ -14,6 +14,7 @@ public class InvoiceDto {
     private String invoiceDate;
     private String dueDate;
     private Integer gstPercent;
+    private BigDecimal discountTotal;
     private String status;
     private List<InvoiceLineDto> lines;
     private BigDecimal subtotal;

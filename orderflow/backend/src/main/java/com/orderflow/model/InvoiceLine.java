@@ -27,6 +27,5 @@ public class InvoiceLine {
     @Column(nullable = false)
     private BigDecimal unitPrice;
 
-    @Builder.Default
-    private Integer taxPercent = 18;
+    private Integer taxPercent;
 }

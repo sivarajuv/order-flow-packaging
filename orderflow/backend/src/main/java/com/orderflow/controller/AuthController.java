@@ -141,4 +141,5 @@ public class AuthController {
     private ResponseEntity<?> forbidden() {
         return ResponseEntity.status(403).body(Map.of("message", "Admin access required"));
     }
+
 }

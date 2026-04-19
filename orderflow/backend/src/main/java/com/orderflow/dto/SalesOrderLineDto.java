@@ -11,7 +11,13 @@ public class SalesOrderLineDto {
     private String handle;
     private String stereoRef;
     private Integer qty;
+    private Integer orderedQty;
+    private Integer salesQty;
     private BigDecimal unitPrice;
+    private BigDecimal discount;
+    private BigDecimal discountAmount;
+    private BigDecimal taxableAmount;
+    private BigDecimal lineTotal;
     private String spec;
     private Long jobCardId;
     private String jobCardNo;

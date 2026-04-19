@@ -31,7 +31,7 @@ public class DataSeeder implements CommandLineRunner {
     public void run(String... args) {
         log.info("Seeding sample data...");
         authService.seedAdminIfNone("admin","admin123","Admin User");
-      /*  // ── Products ─────────────────────────────────────────────
+        /*// ── Products ─────────────────────────────────────────────
         Product wb1215 = productRepo.save(Product.builder()
                 .sku("WB-1215-LC").name("White woven bag 12x15").category("Woven bag")
                 .size("12x15 inch").handle("Loop").uom("Pcs").basePrice(new BigDecimal("18.00")).build());

@@ -100,7 +100,13 @@ class SalesOrderController {
     public SalesOrderDto updateStatus(@PathVariable Long id, @RequestParam String status) {
         return orderService.updateStatus(id, status);
     }
-    @DeleteMapping("/orders/{id}")
+
+    @PutMapping("/{id}/lines/{lineId}")
+    public SalesOrderDto updateLine(@PathVariable Long id, @PathVariable Long lineId, @RequestBody OrderLineUpdateRequest req) {
+        return orderService.updateLine(id, lineId, req);
+    }
+
+    @DeleteMapping("/{id}")
     public ResponseEntity<Void> deleteOrder(@PathVariable Long id) {
         orderService.deleteOrder(id);
         return ResponseEntity.noContent().build();

@@ -9,6 +9,8 @@ import java.math.BigDecimal;
 @AllArgsConstructor
 public class OrderLineUpdateRequest {
     private Integer qty;
+    private Integer salesQty;
     private BigDecimal unitPrice;
+    private BigDecimal discount;
     private String spec;
 }

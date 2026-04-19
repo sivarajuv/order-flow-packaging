@@ -13,7 +13,9 @@ public class SalesOrderRequest {
     public static class LineRequest {
         private Long clientProductId;
         private Integer qty;
+        private Integer salesQty;
         private BigDecimal unitPrice;
+        private BigDecimal discount;
         private String spec;
     }
 }
