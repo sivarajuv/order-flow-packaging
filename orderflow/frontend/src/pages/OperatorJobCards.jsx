@@ -10,6 +10,7 @@ const ACTIVITY_TYPES = [
   { key: 'STEREO_AVAILABLE', label: 'Stereo available' },
   { key: 'MATERIAL',         label: 'Material issued' },
   { key: 'CUTTING',          label: 'Cutting' },
+  { key: 'PRINTING',         label: 'Printing' },
   { key: 'STITCHING',        label: 'Stitching' },
   { key: 'HANDLE',           label: 'Handle attachment' },
   { key: 'QC_CHECK_PACKING', label: 'QC check & packing' },

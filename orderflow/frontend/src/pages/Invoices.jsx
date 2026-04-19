@@ -1,9 +1,8 @@
 import { useEffect, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
-import toast from 'react-hot-toast'
 import { getInvoices, getInvoice } from '../api/client'
 import { Badge, GstBadge, DetailRow, AmountSummary, fmt, fmtN, Spinner } from '../components/UI'
-import { printInvoice } from '../components/PrintTemplates'
+import { printDeliveryChallan, printInvoice } from '../components/PrintTemplates'
 
 const PrintIcon = () => (
   <svg width="13" height="13" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
@@ -11,7 +10,6 @@ const PrintIcon = () => (
   </svg>
 )
 
-// ── Invoices List ─────────────────────────────────────────
 export function InvoicesList() {
   const [invoices, setInvoices] = useState([])
   const [loading, setLoading] = useState(true)
@@ -59,18 +57,20 @@ export function InvoicesList() {
                     <td><GstBadge pct={inv.gstPercent} /></td>
                     <td style={{ fontWeight: 600, textAlign: 'right' }}>{fmt(inv.total)}</td>
                     <td style={{ color: 'var(--green)', textAlign: 'right' }}>{fmt(inv.paidAmount)}</td>
-                    <td style={{ fontWeight: 700, color: (inv.balanceDue || 0) > 0 ? 'var(--amber)' : 'var(--green)', textAlign: 'right' }}>
-                      {fmt(inv.balanceDue)}
-                    </td>
+                    <td style={{ fontWeight: 700, color: (inv.balanceDue || 0) > 0 ? 'var(--amber)' : 'var(--green)', textAlign: 'right' }}>{fmt(inv.balanceDue)}</td>
                     <td><Badge status={inv.status} /></td>
                     <td onClick={e => e.stopPropagation()}>
-                      <button className="btn btn-sm" onClick={() => printInvoice(inv)} title="Print invoice">
-                        <PrintIcon />
-                      </button>
+                      <div style={{ display: 'flex', gap: 6 }}>
+                        <button className="btn btn-sm" onClick={() => printInvoice(inv)} title="Print invoice">
+                          <PrintIcon />
+                        </button>
+                        <button className="btn btn-sm" onClick={() => printDeliveryChallan(inv)} title="Print delivery challan">
+                          Challan
+                        </button>
+                      </div>
                     </td>
                   </tr>
-                ))
-              }
+                ))}
             </tbody>
           </table>
         </div>
@@ -79,7 +79,6 @@ export function InvoicesList() {
   )
 }
 
-// ── Invoice Detail ────────────────────────────────────────
 export function InvoiceDetail() {
   const { id } = useParams()
   const nav = useNavigate()
@@ -99,48 +98,34 @@ export function InvoiceDetail() {
       <div className="page-header">
         <h1 className="page-title">{inv.invoiceNo}</h1>
         <div className="page-actions">
-          {isOverdue && (
-            <span className="badge badge-red" style={{ padding: '4px 10px' }}>Overdue</span>
-          )}
+          {isOverdue && <span className="badge badge-red" style={{ padding: '4px 10px' }}>Overdue</span>}
           <GstBadge pct={inv.gstPercent} />
           <Badge status={inv.status} />
           <button className="btn" onClick={() => printInvoice(inv)}><PrintIcon /> Print</button>
+          <button className="btn" onClick={() => printDeliveryChallan(inv)}>Delivery challan</button>
           {(inv.balanceDue || 0) > 0 && (
-            <button
-              className="btn btn-primary"
-              onClick={() => nav('/payments', { state: { clientId: inv.clientId, invoiceId: inv.id } })}
-            >
+            <button className="btn btn-primary" onClick={() => nav('/payments', { state: { clientId: inv.clientId, invoiceId: inv.id } })}>
               Record payment
             </button>
           )}
         </div>
       </div>
 
-      {/* Header detail cards */}
       <div className="detail-grid">
         <div className="card">
           <div className="card-title" style={{ marginBottom: 10 }}>Invoice details</div>
           <DetailRow label="Invoice no." value={<span className="mono">{inv.invoiceNo}</span>} />
           <DetailRow
             label="Sales order"
-            value={
-              <a className="mono" style={{ color: 'var(--blue-txt)', cursor: 'pointer' }}
-                onClick={() => nav(`/orders/${inv.orderId}`)}>
-                {inv.orderNo}
-              </a>
-            }
+            value={<a className="mono" style={{ color: 'var(--blue-txt)', cursor: 'pointer' }} onClick={() => nav(`/orders/${inv.orderId}`)}>{inv.orderNo}</a>}
           />
           <DetailRow label="Client" value={<strong>{inv.clientName}</strong>} />
-          <DetailRow label="GST no." value={<span className="mono">{inv.clientGstNo || '—'}</span>} />
+          <DetailRow label="GST no." value={<span className="mono">{inv.clientGstNo || '-'}</span>} />
           <DetailRow label="Invoice date" value={inv.invoiceDate} />
+          <DetailRow label="Discount" value={fmt(inv.discountTotal || 0)} />
           <DetailRow
             label="Due date"
-            value={
-              <span style={{ color: isOverdue ? 'var(--red)' : undefined, fontWeight: isOverdue ? 600 : undefined }}>
-                {inv.dueDate}
-                {isOverdue && ' ⚠'}
-              </span>
-            }
+            value={<span style={{ color: isOverdue ? 'var(--red)' : undefined, fontWeight: isOverdue ? 600 : undefined }}>{inv.dueDate}{isOverdue ? ' !' : ''}</span>}
           />
           <DetailRow label="GST rate" value={<GstBadge pct={inv.gstPercent} />} />
         </div>
@@ -156,18 +141,13 @@ export function InvoiceDetail() {
             balance={inv.balanceDue}
           />
           {(inv.balanceDue || 0) > 0 && (
-            <button
-              className="btn btn-primary"
-              style={{ width: '100%', marginTop: 12, justifyContent: 'center' }}
-              onClick={() => nav('/payments', { state: { clientId: inv.clientId, invoiceId: inv.id } })}
-            >
-              Record payment →
+            <button className="btn btn-primary" style={{ width: '100%', marginTop: 12, justifyContent: 'center' }} onClick={() => nav('/payments', { state: { clientId: inv.clientId, invoiceId: inv.id } })}>
+              Record payment
             </button>
           )}
         </div>
       </div>
 
-      {/* Invoice lines grid */}
       <div className="card" style={{ marginBottom: 14 }}>
         <div className="card-title" style={{ marginBottom: 12 }}>Invoice lines</div>
         <div className="table-wrap">
@@ -178,8 +158,10 @@ export function InvoiceDetail() {
                 <th>Product</th>
                 <th>Size</th>
                 <th>Handle</th>
-                <th style={{ width: 80, textAlign: 'right' }}>Qty</th>
+                <th style={{ width: 80, textAlign: 'right' }}>Ordered</th>
+                <th style={{ width: 80, textAlign: 'right' }}>Sales</th>
                 <th style={{ width: 100, textAlign: 'right' }}>Unit price</th>
+                <th style={{ width: 80, textAlign: 'right' }}>Discount</th>
                 <th style={{ width: 65, textAlign: 'center' }}>GST %</th>
                 <th style={{ width: 100, textAlign: 'right' }}>Tax amount</th>
                 <th style={{ width: 120, textAlign: 'right' }}>Line total</th>
@@ -192,12 +174,12 @@ export function InvoiceDetail() {
                   <td style={{ fontWeight: 600 }}>{l.productName}</td>
                   <td className="text-muted">{l.size}</td>
                   <td><span className="tag">{l.handle}</span></td>
-                  <td style={{ textAlign: 'right' }}>{fmtN(l.qty)}</td>
+                  <td style={{ textAlign: 'right' }}>{fmtN(l.orderedQty ?? l.qty)}</td>
+                  <td style={{ textAlign: 'right' }}>{fmtN(l.salesQty ?? l.qty)}</td>
                   <td style={{ textAlign: 'right' }} className="mono">{fmt(l.unitPrice)}</td>
+                  <td style={{ textAlign: 'right' }}>{Number(l.discount || 0).toLocaleString('en-IN', { maximumFractionDigits: 2 })}%</td>
                   <td style={{ textAlign: 'center' }}>
-                    <span className={`badge ${l.taxPercent === 0 ? 'badge-gray' : l.taxPercent === 5 ? 'badge-blue' : 'badge-amber'}`}>
-                      {l.taxPercent}%
-                    </span>
+                    <span className={`badge ${l.taxPercent === 0 ? 'badge-gray' : l.taxPercent === 5 ? 'badge-blue' : 'badge-amber'}`}>{l.taxPercent}%</span>
                   </td>
                   <td style={{ textAlign: 'right', color: 'var(--ink2)' }}>{fmt(l.taxAmount)}</td>
                   <td style={{ textAlign: 'right', fontWeight: 700 }}>{fmt(l.lineTotal)}</td>
@@ -207,8 +189,11 @@ export function InvoiceDetail() {
           </table>
         </div>
 
-        {/* Totals row */}
         <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 32, marginTop: 12, paddingTop: 10, borderTop: '2px solid var(--border)' }}>
+          <div style={{ textAlign: 'right', fontSize: 12 }}>
+            <div className="text-muted">Discount</div>
+            <div style={{ fontWeight: 600 }}>{fmt(inv.discountTotal)}</div>
+          </div>
           <div style={{ textAlign: 'right', fontSize: 12 }}>
             <div className="text-muted">Subtotal</div>
             <div style={{ fontWeight: 600 }}>{fmt(inv.subtotal)}</div>
@@ -223,9 +208,7 @@ export function InvoiceDetail() {
           </div>
           <div style={{ textAlign: 'right', fontSize: 14 }}>
             <div className="text-muted" style={{ fontSize: 11 }}>Balance due</div>
-            <div style={{ fontWeight: 800, fontSize: 16, color: (inv.balanceDue || 0) > 0 ? 'var(--amber)' : 'var(--green)' }}>
-              {fmt(inv.balanceDue)}
-            </div>
+            <div style={{ fontWeight: 800, fontSize: 16, color: (inv.balanceDue || 0) > 0 ? 'var(--amber)' : 'var(--green)' }}>{fmt(inv.balanceDue)}</div>
           </div>
         </div>
       </div>

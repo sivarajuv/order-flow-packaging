@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { useAuth } from '../auth/AuthContext'
 import toast from 'react-hot-toast'
+import { BRAND } from '../branding'
 
 export default function Login() {
   const { login } = useAuth()
@@ -45,17 +46,19 @@ export default function Login() {
 
         {/* Brand */}
         <div style={{ textAlign: 'center', marginBottom: 28 }}>
-          <div style={{
-            width: 56, height: 56, background: '#1D4ED8', borderRadius: 14,
-            display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-            color: '#fff', fontSize: 20, fontWeight: 700,
-            marginBottom: 14, boxShadow: '0 6px 20px rgba(29,78,216,.35)',
-          }}>OF</div>
+          <img
+            src={BRAND.logo}
+            alt={BRAND.name}
+            style={{
+              width: 88, height: 88, objectFit: 'cover', borderRadius: 18,
+              marginBottom: 14, boxShadow: '0 10px 24px rgba(0,0,0,.14)', border: '1px solid #DCCF8A',
+            }}
+          />
           <div style={{ fontSize: 24, fontWeight: 600, letterSpacing: '-.4px', color: '#1C1B18' }}>
-            OrderFlow
+            {BRAND.name}
           </div>
           <div style={{ fontSize: 12, color: '#6A6760', marginTop: 4 }}>
-            Sales &amp; Production Management
+            {BRAND.subtitle}
           </div>
         </div>
 

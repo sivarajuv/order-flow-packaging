@@ -150,3 +150,13 @@ export const deleteUser = (id) =>
       Authorization: `Bearer ${getToken()}`
     }
   })
+  // ── ADMIN APIs ─────────────────────────────
+  export const deleteAllData = () =>
+    fetch('/api/admin/delete-all', {
+      method: 'DELETE',
+      headers: {
+        Authorization: `Bearer ${getToken()}`
+      }
+    }).then(r => {
+      if (!r.ok) throw new Error('Delete all failed')
+    })

@@ -34,10 +34,13 @@ export function ClientsList() {
     if (!editRow.code || !editRow.name) { toast.error('Code and name required'); return }
     setSaving(true)
     try {
+      const parsedGstPercent = editRow.gstPercent === '' || editRow.gstPercent == null
+        ? 18
+        : parseInt(editRow.gstPercent)
       const payload = {
         ...editRow,
         creditLimit:    parseFloat(editRow.creditLimit)    || 0,
-        gstPercent:     parseInt(editRow.gstPercent)       || 18,
+        gstPercent:     Number.isNaN(parsedGstPercent) ? 18 : parsedGstPercent,
         pyOutstanding:  parseFloat(editRow.pyOutstanding)  || 0,
         cyOutstanding:  parseFloat(editRow.cyOutstanding)  || 0,
       }
@@ -214,10 +217,13 @@ export function ClientDetail() {
   const saveClient = async () => {
     setSaving(true)
     try {
+      const parsedGstPercent = clientForm.gstPercent === '' || clientForm.gstPercent == null
+        ? 18
+        : parseInt(clientForm.gstPercent)
       const updated = await updateClient(id, {
         ...clientForm,
         creditLimit:   parseFloat(clientForm.creditLimit)   || 0,
-        gstPercent:    parseInt(clientForm.gstPercent)      || 18,
+        gstPercent:    Number.isNaN(parsedGstPercent) ? 18 : parsedGstPercent,
         pyOutstanding: parseFloat(clientForm.pyOutstanding) || 0,
         cyOutstanding: parseFloat(clientForm.cyOutstanding) || 0,
       })

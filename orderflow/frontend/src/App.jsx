@@ -14,6 +14,7 @@ import Payments from './pages/Payments'
 import Reports from './pages/Reports'
 import UserManagement from './pages/UserManagement'
 import AiChat from './components/AiChat'
+import { BRAND } from './branding'
 
 const ALL_NAV = [
   { to: '/',         key: 'dashboard', label: 'Dashboard',    icon: 'M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6' },
@@ -37,10 +38,10 @@ function Sidebar() {
   return (
     <aside className="sidebar">
       <div className="sb-brand">
-        <div className="sb-logo">OF</div>
+        <img src={BRAND.logo} alt={BRAND.name} className="sb-logo" style={{ objectFit: 'cover' }} />
         <div>
-          <div className="sb-name">OrderFlow</div>
-          <div className="sb-sub">Sales &amp; production</div>
+          <div className="sb-name">{BRAND.name}</div>
+          <div className="sb-sub">{BRAND.subtitle}</div>
         </div>
       </div>
 
@@ -111,11 +112,14 @@ function SplashLoader() {
       background: '#F4F3EE', fontFamily: '"IBM Plex Sans", sans-serif',
     }}>
       <div style={{ textAlign: 'center' }}>
-        <div style={{
-          width: 48, height: 48, background: '#1D4ED8', borderRadius: 12,
-          display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-          color: '#fff', fontSize: 17, fontWeight: 700, marginBottom: 14,
-        }}>OF</div>
+        <img
+          src={BRAND.logo}
+          alt={BRAND.name}
+          style={{
+            width: 56, height: 56, borderRadius: 14, marginBottom: 14,
+            objectFit: 'cover', boxShadow: '0 8px 20px rgba(0,0,0,.12)', border: '1px solid #DCCF8A',
+          }}
+        />
         <div style={{ fontSize: 13, color: '#6A6760' }}>Loading…</div>
       </div>
     </div>

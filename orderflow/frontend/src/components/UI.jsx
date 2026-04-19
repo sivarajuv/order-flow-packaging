@@ -89,6 +89,7 @@ export function Pipeline({ doneStages = [] }) {
     'STEREO_AVAILABLE',
     'MATERIAL',
     'CUTTING',
+    'PRINTING',
     'STITCHING',
     'HANDLE',
     'QC_CHECK_PACKING',

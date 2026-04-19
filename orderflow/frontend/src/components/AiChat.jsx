@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect } from 'react'
 import { sendChat } from '../api/client'
+import { BRAND } from '../branding'
 
 const QUICK_PROMPTS = [
   'What orders are in production today?',
@@ -13,7 +14,7 @@ export default function AiChat({ onClose }) {
   const [messages, setMessages] = useState([
     {
       role: 'assistant',
-      content: "Hi! I'm OrderFlow AI. I have live access to your orders, invoices, job cards, and client data. Ask me anything — try \"what's in production?\" or \"who owes us money?\"",
+      content: `Hi! I'm ${BRAND.name} AI. I have live access to your orders, invoices, job cards, and client data. Ask me anything — try "what's in production?" or "who owes us money?"`,
     },
   ])
   const [input, setInput] = useState('')
@@ -29,7 +30,7 @@ export default function AiChat({ onClose }) {
     inputRef.current?.focus()
   }, [])
 
-  const send = async (text) => {
+  const send = async text => {
     const msg = (text || input).trim()
     if (!msg || loading) return
     setInput('')
@@ -48,7 +49,10 @@ export default function AiChat({ onClose }) {
   }
 
   const handleKey = e => {
-    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send() }
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault()
+      send()
+    }
   }
 
   return (
@@ -56,7 +60,7 @@ export default function AiChat({ onClose }) {
       <div className="ai-panel-header">
         <div className="ai-panel-title">
           <span className="ai-badge">AI</span>
-          OrderFlow Assistant
+          {BRAND.assistantName}
         </div>
         <button className="ai-close" onClick={onClose}>×</button>
       </div>
@@ -64,7 +68,7 @@ export default function AiChat({ onClose }) {
       <div className="ai-messages">
         {messages.map((m, i) => (
           <div key={i} className={`ai-msg ${m.role}`}>
-            {m.role === 'assistant' && <div className="ai-avatar">OF</div>}
+            {m.role === 'assistant' && <div className="ai-avatar">{BRAND.shortName}</div>}
             <div className="ai-bubble">
               {m.content.split('\n').map((line, j) => (
                 <span key={j}>
@@ -81,7 +85,7 @@ export default function AiChat({ onClose }) {
         ))}
         {loading && (
           <div className="ai-msg assistant">
-            <div className="ai-avatar">OF</div>
+            <div className="ai-avatar">{BRAND.shortName}</div>
             <div className="ai-bubble">
               <div className="ai-typing-dots"><span /><span /><span /></div>
             </div>
