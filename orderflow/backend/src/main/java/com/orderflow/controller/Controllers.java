@@ -5,6 +5,7 @@ import com.orderflow.service.*;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.multipart.MultipartFile;
 import java.util.List;
 
 // ─── Client Controller ───────────────────────────────────────────────────────
@@ -27,6 +28,11 @@ class ClientController {
     @PutMapping("/{id}")
     public ClientDto update(@PathVariable Long id, @RequestBody ClientDto dto) {
         return clientService.update(id, dto);
+    }
+
+    @PostMapping(value = "/{id}/design", consumes = "multipart/form-data")
+    public ClientDto uploadDesign(@PathVariable Long id, @RequestPart("file") MultipartFile file) {
+        return clientService.uploadDesign(id, file);
     }
 
     @GetMapping("/{id}/products")
@@ -154,6 +160,11 @@ class InvoiceController {
 
     @PostMapping
     public InvoiceDto create(@RequestBody InvoiceRequest req) { return invoiceService.create(req); }
+
+    @PutMapping("/{id}")
+    public InvoiceDto update(@PathVariable Long id, @RequestBody InvoiceUpdateRequest req) {
+        return invoiceService.update(id, req);
+    }
 }
 
 // ─── Payment Controller ──────────────────────────────────────────────────────
@@ -169,6 +180,20 @@ class PaymentController {
 
     @PostMapping
     public PaymentDto create(@RequestBody PaymentRequest req) { return paymentService.create(req); }
+}
+
+@RestController
+@RequestMapping("/api/expenses")
+@RequiredArgsConstructor
+@CrossOrigin(origins = "*")
+class ExpenseController {
+    private final ExpenseService expenseService;
+
+    @GetMapping
+    public List<ExpenseDto> getAll() { return expenseService.getAll(); }
+
+    @PostMapping
+    public ExpenseDto create(@RequestBody ExpenseDto dto) { return expenseService.create(dto); }
 }
 
 // ─── Dashboard Controller ────────────────────────────────────────────────────

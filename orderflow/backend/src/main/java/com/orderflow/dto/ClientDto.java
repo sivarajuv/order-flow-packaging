@@ -11,10 +11,13 @@ public class ClientDto {
     private String gstNo;
     private String billingAddress;
     private String shippingAddress;
+    private String placeOfSupply;
     private String phone;
     private String email;
     private String salesperson;
     private String areaCode;
+    private String designFileName;
+    private String designUrl;
     private BigDecimal creditLimit;
     private String paymentTerms;
     private Integer gstPercent;

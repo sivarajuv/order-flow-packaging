@@ -1,5 +1,6 @@
 package com.orderflow.dto;
 import lombok.*;
+import java.math.BigDecimal;
 import java.util.List;
 @Data @Builder @NoArgsConstructor @AllArgsConstructor
 public class JobCardDto {
@@ -17,7 +18,9 @@ public class JobCardDto {
     private String size;
     private String handle;
     private String stereoRef;
+    private BigDecimal weightGrams;
     private Integer qty;
+    private BigDecimal materialRequiredKg;
     private String spec;
     private String startDate;
     private String dueDate;

@@ -31,9 +31,11 @@ public class ProductService {
             throw new RuntimeException("SKU already exists: " + dto.getSku());
         Product p = Product.builder()
                 .sku(dto.getSku()).name(dto.getName()).category(dto.getCategory())
-                .size(dto.getSize()).handle(dto.getHandle() != null ? dto.getHandle() : "None")
+                .size(dto.getSize()).hsnCode(dto.getHsnCode())
+                .handle(dto.getHandle() != null ? dto.getHandle() : "None")
                 .uom(dto.getUom() != null ? dto.getUom() : "Pcs")
                 .basePrice(dto.getBasePrice() != null ? dto.getBasePrice() : java.math.BigDecimal.ZERO)
+                .weightGrams(dto.getWeightGrams() != null ? dto.getWeightGrams() : java.math.BigDecimal.ZERO)
                 .status(dto.getStatus() != null ? Product.ProductStatus.valueOf(dto.getStatus()) : Product.ProductStatus.ACTIVE)
                 .build();
         return mapper.toProductDto(productRepo.save(p));
@@ -43,8 +45,9 @@ public class ProductService {
         Product p = productRepo.findById(id)
                 .orElseThrow(() -> new RuntimeException("Product not found: " + id));
         p.setSku(dto.getSku()); p.setName(dto.getName()); p.setCategory(dto.getCategory());
-        p.setSize(dto.getSize()); p.setHandle(dto.getHandle()); p.setUom(dto.getUom());
+        p.setSize(dto.getSize()); p.setHsnCode(dto.getHsnCode()); p.setHandle(dto.getHandle()); p.setUom(dto.getUom());
         if (dto.getBasePrice() != null) p.setBasePrice(dto.getBasePrice());
+        if (dto.getWeightGrams() != null) p.setWeightGrams(dto.getWeightGrams());
         if (dto.getStatus() != null) p.setStatus(Product.ProductStatus.valueOf(dto.getStatus()));
         return mapper.toProductDto(productRepo.save(p));
     }

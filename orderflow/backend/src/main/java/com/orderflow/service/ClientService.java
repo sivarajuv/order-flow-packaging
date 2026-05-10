@@ -4,8 +4,17 @@ import com.orderflow.dto.*;
 import com.orderflow.model.*;
 import com.orderflow.repository.*;
 import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.multipart.MultipartFile;
+
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
+import java.nio.file.StandardCopyOption;
+import java.util.UUID;
 import java.util.List;
 import java.util.stream.Collectors;
 
@@ -13,6 +22,8 @@ import java.util.stream.Collectors;
 @RequiredArgsConstructor
 @Transactional
 public class ClientService {
+    @Value("${app.upload.base-dir:uploads}")
+    private String uploadBaseDir;
 
     private final ClientRepository clientRepo;
     private final ClientProductRepository cpRepo;
@@ -33,8 +44,9 @@ public class ClientService {
             throw new RuntimeException("Client code already exists: " + dto.getCode());
         Client c = Client.builder()
                 .code(dto.getCode()).name(dto.getName()).gstNo(dto.getGstNo())
-                .billingAddress(dto.getBillingAddress()).shippingAddress(dto.getShippingAddress())
+                .billingAddress(dto.getBillingAddress()).shippingAddress(dto.getShippingAddress()).placeOfSupply(dto.getPlaceOfSupply())
                 .phone(dto.getPhone()).email(dto.getEmail()).salesperson(dto.getSalesperson()).areaCode(dto.getAreaCode())
+                .designFileName(dto.getDesignFileName()).designUrl(dto.getDesignUrl())
                 .creditLimit(dto.getCreditLimit() != null ? dto.getCreditLimit() : java.math.BigDecimal.ZERO)
                 .paymentTerms(dto.getPaymentTerms() != null ? dto.getPaymentTerms() : "Net 30")
                 .gstPercent(dto.getGstPercent() != null ? dto.getGstPercent() : 18)
@@ -49,8 +61,10 @@ public class ClientService {
         Client c = clientRepo.findById(id)
                 .orElseThrow(() -> new RuntimeException("Client not found: " + id));
         c.setCode(dto.getCode()); c.setName(dto.getName()); c.setGstNo(dto.getGstNo());
-        c.setBillingAddress(dto.getBillingAddress()); c.setShippingAddress(dto.getShippingAddress());
+        c.setBillingAddress(dto.getBillingAddress()); c.setShippingAddress(dto.getShippingAddress()); c.setPlaceOfSupply(dto.getPlaceOfSupply());
         c.setPhone(dto.getPhone()); c.setEmail(dto.getEmail()); c.setSalesperson(dto.getSalesperson()); c.setAreaCode(dto.getAreaCode());
+        if (dto.getDesignFileName() != null) c.setDesignFileName(dto.getDesignFileName());
+        if (dto.getDesignUrl() != null) c.setDesignUrl(dto.getDesignUrl());
         if (dto.getCreditLimit() != null) c.setCreditLimit(dto.getCreditLimit());
         if (dto.getPaymentTerms() != null) c.setPaymentTerms(dto.getPaymentTerms());
         if (dto.getGstPercent() != null) c.setGstPercent(dto.getGstPercent());
@@ -58,6 +72,34 @@ public class ClientService {
         if (dto.getCyOutstanding() != null) c.setCyOutstanding(dto.getCyOutstanding());
         if (dto.getStatus() != null) c.setStatus(Client.ClientStatus.valueOf(dto.getStatus()));
         return mapper.toClientDto(clientRepo.save(c));
+    }
+
+    public ClientDto uploadDesign(Long id, MultipartFile file) {
+        Client client = clientRepo.findById(id)
+                .orElseThrow(() -> new RuntimeException("Client not found: " + id));
+        if (file == null || file.isEmpty()) {
+            throw new RuntimeException("Please choose a design file to upload");
+        }
+
+        try {
+            String originalName = file.getOriginalFilename() != null ? file.getOriginalFilename() : "design";
+            String extension = "";
+            int dot = originalName.lastIndexOf('.');
+            if (dot >= 0) extension = originalName.substring(dot);
+
+            Path targetDir = Paths.get(uploadBaseDir).toAbsolutePath().normalize().resolve("client-designs");
+            Files.createDirectories(targetDir);
+
+            String storedName = "client-" + id + "-" + UUID.randomUUID() + extension;
+            Path targetFile = targetDir.resolve(storedName);
+            Files.copy(file.getInputStream(), targetFile, StandardCopyOption.REPLACE_EXISTING);
+
+            client.setDesignFileName(originalName);
+            client.setDesignUrl("/uploads/client-designs/" + storedName);
+            return mapper.toClientDto(clientRepo.save(client));
+        } catch (IOException e) {
+            throw new RuntimeException("Unable to upload client design", e);
+        }
     }
 
     public List<ClientProductDto> getClientProducts(Long clientId) {

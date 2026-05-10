@@ -22,6 +22,7 @@ public class JobActivity {
     private ActivityType activityType;
 
     private String description;
+    private Integer qty;
     private String performedBy;
 
     @Builder.Default

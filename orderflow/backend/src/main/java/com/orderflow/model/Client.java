@@ -22,10 +22,13 @@ public class Client {
     private String gstNo;
     private String billingAddress;
     private String shippingAddress;
+    private String placeOfSupply;
     private String phone;
     private String email;
     private String salesperson;
     private String areaCode;
+    private String designFileName;
+    private String designUrl;
 
     @Builder.Default
     private BigDecimal creditLimit = BigDecimal.ZERO;
@@ -34,7 +37,7 @@ public class Client {
     private String paymentTerms = "Net 30";
 
     @Builder.Default
-    private Integer gstPercent = 18;   // 0, 5, or 18
+    private Integer gstPercent = 18;   // 0, 5, 18, or 28
 
     @Builder.Default
     private BigDecimal pyOutstanding = BigDecimal.ZERO;

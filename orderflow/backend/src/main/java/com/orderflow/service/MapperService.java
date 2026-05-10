@@ -15,12 +15,15 @@ import java.util.stream.Collectors;
 public class MapperService {
 
     private final PaymentAllocationRepository allocRepo;
+    private static final String COMPANY_STATE_CODE = "27";
+    private static final String COMPANY_STATE_NAME = "MAHARASHTRA";
 
     public ClientDto toClientDto(Client c) {
         return ClientDto.builder()
                 .id(c.getId()).code(c.getCode()).name(c.getName()).gstNo(c.getGstNo())
-                .billingAddress(c.getBillingAddress()).shippingAddress(c.getShippingAddress())
+                .billingAddress(c.getBillingAddress()).shippingAddress(c.getShippingAddress()).placeOfSupply(c.getPlaceOfSupply())
                 .phone(c.getPhone()).email(c.getEmail()).salesperson(c.getSalesperson()).areaCode(c.getAreaCode())
+                .designFileName(c.getDesignFileName()).designUrl(c.getDesignUrl())
                 .creditLimit(c.getCreditLimit()).paymentTerms(c.getPaymentTerms())
                 .gstPercent(c.getGstPercent())
                 .pyOutstanding(c.getPyOutstanding()).cyOutstanding(c.getCyOutstanding())
@@ -31,8 +34,9 @@ public class MapperService {
     public ProductDto toProductDto(Product p) {
         return ProductDto.builder()
                 .id(p.getId()).sku(p.getSku()).name(p.getName())
-                .category(p.getCategory()).size(p.getSize()).handle(p.getHandle())
+                .category(p.getCategory()).size(p.getSize()).hsnCode(p.getHsnCode()).handle(p.getHandle())
                 .uom(p.getUom()).basePrice(p.getBasePrice())
+                .weightGrams(p.getWeightGrams())
                 .status(p.getStatus().name())
                 .build();
     }
@@ -46,8 +50,10 @@ public class MapperService {
                 .productName(p.getName())
                 .productSku(p.getSku())
                 .size(p.getSize())
+                .hsnCode(p.getHsnCode())
                 .handle(p.getHandle())
                 .basePrice(p.getBasePrice())
+                .weightGrams(p.getWeightGrams())
                 .agreedPrice(cp.getAgreedPrice())
                 .stereoRef(cp.getStereoRef())
                 .specialSpec(cp.getSpecialSpec())
@@ -70,6 +76,7 @@ public class MapperService {
                 .id(o.getId()).orderNo(o.getOrderNo())
                 .clientId(c.getId()).clientName(c.getName()).clientCode(c.getCode())
                 .salesperson(c.getSalesperson()).clientGstPercent(c.getGstPercent())
+                .placeOfSupply(c.getPlaceOfSupply())
                 .orderDate(o.getOrderDate() != null ? o.getOrderDate().toString() : null)
                 .deliveryDate(o.getDeliveryDate() != null ? o.getDeliveryDate().toString() : null)
                 .status(o.getStatus().name()).notes(o.getNotes())
@@ -88,7 +95,7 @@ public class MapperService {
                 .id(l.getId())
                 .clientProductId(cp.getId())
                 .productName(p.getName()).sku(p.getSku())
-                .size(p.getSize()).handle(p.getHandle())
+                .size(p.getSize()).hsnCode(p.getHsnCode()).handle(p.getHandle())
                 .stereoRef(cp.getStereoRef())
                 .qty(l.getQty())
                 .orderedQty(l.getQty())
@@ -117,6 +124,7 @@ public class MapperService {
                         .id(a.getId())
                         .activityType(a.getActivityType().name())
                         .description(a.getDescription())
+                        .qty(a.getQty())
                         .performedBy(a.getPerformedBy())
                         .activityTime(a.getActivityTime() != null ? a.getActivityTime().toString() : null)
                         .notes(a.getNotes())
@@ -135,7 +143,9 @@ public class MapperService {
                 .clientId(c.getId()).clientName(c.getName()).salesperson(c.getSalesperson()).areaCode(c.getAreaCode())
                 .productId(p.getId()).productName(p.getName()).sku(p.getSku())
                 .size(p.getSize()).handle(p.getHandle()).stereoRef(cp.getStereoRef())
+                .weightGrams(defaultWeightGrams(p))
                 .qty(line.getQty()).spec(line.getSpec())
+                .materialRequiredKg(materialRequiredKg(p, line.getQty()))
                 .startDate(jc.getStartDate() != null ? jc.getStartDate().toString() : null)
                 .dueDate(jc.getDueDate() != null ? jc.getDueDate().toString() : null)
                 .status(jc.getStatus().name())
@@ -160,7 +170,7 @@ public class MapperService {
                     .divide(BigDecimal.valueOf(100), 2, RoundingMode.HALF_UP);
             return InvoiceLineDto.builder()
                     .id(l.getId()).orderLineId(ol.getId())
-                    .productName(p.getName()).size(p.getSize()).handle(p.getHandle())
+                    .productName(p.getName()).size(p.getSize()).hsnCode(p.getHsnCode()).handle(p.getHandle())
                     .qty(l.getQty())
                     .orderedQty(ol.getQty())
                     .salesQty(resolveSalesQty(ol))
@@ -175,22 +185,40 @@ public class MapperService {
         BigDecimal subtotal = lineDtos.stream()
                 .map(InvoiceLineDto::getTaxableAmount)
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
+        BigDecimal invoiceDiscount = defaultInvoiceDiscount(inv);
         BigDecimal discountTotal = lineDtos.stream()
                 .map(InvoiceLineDto::getDiscountAmount)
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
-        BigDecimal taxTotal = lineDtos.stream()
-                .map(InvoiceLineDto::getTaxAmount)
-                .reduce(BigDecimal.ZERO, BigDecimal::add);
-        BigDecimal total = subtotal.add(taxTotal);
+        discountTotal = discountTotal.add(invoiceDiscount);
+        int gstPercent = inv.getGstPercent() != null ? inv.getGstPercent() : 0;
+        BigDecimal taxTotal = subtotal.multiply(BigDecimal.valueOf(gstPercent))
+                .divide(BigDecimal.valueOf(100), 2, RoundingMode.HALF_UP);
+        BigDecimal total = subtotal.add(taxTotal).subtract(invoiceDiscount).max(BigDecimal.ZERO);
+        Client client = inv.getClient();
+        boolean intraState = isIntraState(client.getPlaceOfSupply());
+        BigDecimal cgstAmount = intraState ? splitTaxAmount(taxTotal) : BigDecimal.ZERO;
+        BigDecimal sgstAmount = intraState ? splitTaxAmount(taxTotal) : BigDecimal.ZERO;
+        BigDecimal igstAmount = intraState ? BigDecimal.ZERO : taxTotal;
+        Integer cgstPercent = intraState ? splitTaxPercent(gstPercent) : 0;
+        Integer sgstPercent = intraState ? splitTaxPercent(gstPercent) : 0;
+        Integer igstPercent = intraState ? 0 : gstPercent;
 
         return InvoiceDto.builder()
                 .id(inv.getId()).invoiceNo(inv.getInvoiceNo())
                 .orderId(inv.getSalesOrder().getId()).orderNo(inv.getSalesOrder().getOrderNo())
-                .clientId(inv.getClient().getId()).clientName(inv.getClient().getName())
-                .clientGstNo(inv.getClient().getGstNo())
+                .clientId(client.getId()).clientName(client.getName())
+                .clientGstNo(client.getGstNo())
+                .clientBillingAddress(client.getBillingAddress())
+                .clientShippingAddress(client.getShippingAddress())
+                .clientAddress(preferredClientAddress(client))
+                .placeOfSupply(client.getPlaceOfSupply())
                 .invoiceDate(inv.getInvoiceDate() != null ? inv.getInvoiceDate().toString() : null)
                 .dueDate(inv.getDueDate() != null ? inv.getDueDate().toString() : null)
-                .gstPercent(inv.getGstPercent()).discountTotal(discountTotal).status(inv.getStatus().name())
+                .gstPercent(gstPercent)
+                .cgstAmount(cgstAmount).sgstAmount(sgstAmount).igstAmount(igstAmount)
+                .cgstPercent(cgstPercent).sgstPercent(sgstPercent).igstPercent(igstPercent)
+                .taxMode(intraState ? "INTRA_STATE" : "INTER_STATE")
+                .invoiceDiscount(invoiceDiscount).discountTotal(discountTotal).status(inv.getStatus().name())
                 .lines(lineDtos).subtotal(subtotal).taxTotal(taxTotal).total(total)
                 .paidAmount(paid).balanceDue(total.subtract(paid))
                 .build();
@@ -226,6 +254,25 @@ public class MapperService {
         return line.getDiscount() != null ? line.getDiscount() : BigDecimal.ZERO;
     }
 
+    private BigDecimal defaultInvoiceDiscount(Invoice invoice) {
+        return invoice.getInvoiceDiscount() != null ? invoice.getInvoiceDiscount() : BigDecimal.ZERO;
+    }
+
+    private BigDecimal defaultWeightGrams(Product product) {
+        return product.getWeightGrams() != null ? product.getWeightGrams() : BigDecimal.ZERO;
+    }
+
+    private BigDecimal materialRequiredKg(Product product, Integer qty) {
+        return defaultWeightGrams(product)
+                .multiply(BigDecimal.valueOf(qty != null ? qty : 0))
+                .divide(BigDecimal.valueOf(1000), 3, RoundingMode.HALF_UP);
+    }
+
+    private String preferredClientAddress(Client client) {
+        if (client.getShippingAddress() != null && !client.getShippingAddress().isBlank()) return client.getShippingAddress();
+        return client.getBillingAddress();
+    }
+
     private BigDecimal salesOrderLineBaseAmount(SalesOrderLine line) {
         return line.getUnitPrice().multiply(BigDecimal.valueOf(resolveSalesQty(line)));
     }
@@ -238,5 +285,20 @@ public class MapperService {
 
     private BigDecimal salesOrderLineTaxableAmount(SalesOrderLine line) {
         return salesOrderLineBaseAmount(line).subtract(salesOrderLineDiscountAmount(line));
+    }
+
+    private boolean isIntraState(String placeOfSupply) {
+        if (placeOfSupply == null || placeOfSupply.isBlank()) return true;
+        String normalized = placeOfSupply.trim().toUpperCase();
+        return normalized.equals(COMPANY_STATE_NAME) || normalized.startsWith(COMPANY_STATE_CODE);
+    }
+
+    private BigDecimal splitTaxAmount(BigDecimal totalTax) {
+        return (totalTax != null ? totalTax : BigDecimal.ZERO)
+                .divide(BigDecimal.valueOf(2), 2, RoundingMode.HALF_UP);
+    }
+
+    private Integer splitTaxPercent(Integer totalPercent) {
+        return totalPercent == null ? 0 : totalPercent / 2;
     }
 }

@@ -42,6 +42,7 @@ public class JobCardService {
                 .jobCard(jc)
                 .activityType(JobActivity.ActivityType.valueOf(req.getActivityType()))
                 .description(req.getDescription())
+                .qty(req.getQty())
                 .performedBy(req.getPerformedBy())
                 .activityTime(LocalDateTime.now())
                 .notes(req.getNotes())

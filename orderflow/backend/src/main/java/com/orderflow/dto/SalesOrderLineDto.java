@@ -8,6 +8,7 @@ public class SalesOrderLineDto {
     private String productName;
     private String sku;
     private String size;
+    private String hsnCode;
     private String handle;
     private String stereoRef;
     private Integer qty;

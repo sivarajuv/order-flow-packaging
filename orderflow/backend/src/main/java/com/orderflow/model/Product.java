@@ -20,6 +20,7 @@ public class Product {
 
     private String category;
     private String size;
+    private String hsnCode;
 
     @Builder.Default
     private String handle = "None";   // Loop, D-cut, None, Other
@@ -29,6 +30,9 @@ public class Product {
 
     @Builder.Default
     private BigDecimal basePrice = BigDecimal.ZERO;
+
+    @Builder.Default
+    private BigDecimal weightGrams = BigDecimal.ZERO;
 
     @Enumerated(EnumType.STRING)
     @Builder.Default

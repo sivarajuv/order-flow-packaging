@@ -15,8 +15,10 @@ public class ClientProductDto {
     private String productName;
     private String productSku;
     private String size;
+    private String hsnCode;
     private String handle;
     private BigDecimal basePrice;
+    private BigDecimal weightGrams;
     private BigDecimal agreedPrice;
     private String stereoRef;
     private String specialSpec;

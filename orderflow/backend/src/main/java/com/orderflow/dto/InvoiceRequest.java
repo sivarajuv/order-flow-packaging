@@ -6,4 +6,5 @@ public class InvoiceRequest {
     private String invoiceDate;
     private String dueDate;
     private Integer gstOverride;
+    private java.math.BigDecimal invoiceDiscount;
 }

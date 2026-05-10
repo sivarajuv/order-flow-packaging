@@ -60,13 +60,7 @@ public class PaymentService {
 
                 // Refresh and update invoice status
                 BigDecimal totalPaid = allocRepo.sumAllocatedByInvoiceId(invoice.getId());
-                // Recalculate invoice total
-                BigDecimal invTotal = invoice.getLines().stream().map(l -> {
-                    BigDecimal base = l.getUnitPrice().multiply(BigDecimal.valueOf(l.getQty()));
-                    BigDecimal tax = base.multiply(BigDecimal.valueOf(l.getTaxPercent()))
-                            .divide(BigDecimal.valueOf(100), 2, java.math.RoundingMode.HALF_UP);
-                    return base.add(tax);
-                }).reduce(BigDecimal.ZERO, BigDecimal::add);
+                BigDecimal invTotal = mapper.toInvoiceDto(invoice).getTotal();
 
                 if (totalPaid.compareTo(invTotal) >= 0) {
                     invoice.setStatus(Invoice.InvoiceStatus.PAID);

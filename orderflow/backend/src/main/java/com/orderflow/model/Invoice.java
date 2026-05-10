@@ -2,6 +2,7 @@ package com.orderflow.model;
 
 import jakarta.persistence.*;
 import lombok.*;
+import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.List;
@@ -28,7 +29,10 @@ public class Invoice {
     private LocalDate invoiceDate;
     private LocalDate dueDate;
 
-    private Integer gstPercent;   // 0, 5, or 18
+    private Integer gstPercent;   // 0, 5, 18, or 28
+
+    @Builder.Default
+    private BigDecimal invoiceDiscount = BigDecimal.ZERO;
 
     @Enumerated(EnumType.STRING)
     @Builder.Default

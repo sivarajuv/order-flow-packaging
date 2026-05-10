@@ -1,12 +1,16 @@
 package com.orderflow.dto;
+
 import lombok.*;
+
+import java.math.BigDecimal;
+
 @Data @Builder @NoArgsConstructor @AllArgsConstructor
-public class JobActivityDto {
+public class ExpenseDto {
     private Long id;
-    private String activityType;
+    private String expenseDate;
+    private String category;
+    private String paidTo;
     private String description;
-    private Integer qty;
-    private String performedBy;
-    private String activityTime;
+    private BigDecimal amount;
     private String notes;
 }

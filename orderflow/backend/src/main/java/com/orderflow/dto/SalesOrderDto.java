@@ -17,6 +17,7 @@ public class SalesOrderDto {
     private String clientCode;
     private String salesperson;
     private Integer clientGstPercent;
+    private String placeOfSupply;
     private String orderDate;
     private String deliveryDate;
     private String status;

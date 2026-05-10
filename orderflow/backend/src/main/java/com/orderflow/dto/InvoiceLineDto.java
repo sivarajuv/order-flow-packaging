@@ -7,6 +7,7 @@ public class InvoiceLineDto {
     private Long orderLineId;
     private String productName;
     private String size;
+    private String hsnCode;
     private String handle;
     private Integer qty;
     private Integer orderedQty;

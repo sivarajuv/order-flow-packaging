@@ -8,8 +8,10 @@ public class ProductDto {
     private String name;
     private String category;
     private String size;
+    private String hsnCode;
     private String handle;
     private String uom;
     private BigDecimal basePrice;
+    private BigDecimal weightGrams;
     private String status;
 }
