@@ -46,13 +46,37 @@ export default function ClientDetail() {
 
   return (
     <div className="page">
-      {/* HEADER */}
       <div className="page-header">
-        <h1 className="page-title">{client.name}</h1>
-        <Badge status={client.status} />
+        <div>
+          <h1 className="page-title">{client.name}</h1>
+          <div className="text-muted text-small" style={{ marginTop: 4 }}>
+            Create sales orders and payments directly for this client.
+          </div>
+        </div>
+        <div className="page-actions">
+          <button
+            className="btn"
+            onClick={() => printClientDetail(client)}
+            title="Print client detail"
+          >
+            Print
+          </button>
+          <button
+            className="btn"
+            onClick={() => nav("/orders", { state: { clientId: client.id } })}
+          >
+            + Sales order
+          </button>
+          <button
+            className="btn btn-primary"
+            onClick={() => nav("/payments", { state: { clientId: client.id } })}
+          >
+            + Payment
+          </button>
+          <Badge status={client.status} />
+        </div>
       </div>
 
-      {/* CLIENT INFO */}
       <div className="card" style={{ marginBottom: 16 }}>
         <h3>Client Info</h3>
         <p><b>Code:</b> {client.code}</p>
@@ -61,7 +85,6 @@ export default function ClientDetail() {
         <p><b>Credit Limit:</b> {fmt(client.creditLimit)}</p>
       </div>
 
-      {/* SUMMARY */}
       <div className="card" style={{ marginBottom: 16 }}>
         <h3>Summary</h3>
         <p><b>Total Orders:</b> {orders.length}</p>
@@ -70,7 +93,6 @@ export default function ClientDetail() {
         <p><b>Outstanding:</b> {fmt(totalOutstanding)}</p>
       </div>
 
-      {/* ORDERS */}
       <div className="card" style={{ marginBottom: 16 }}>
         <h3>Orders</h3>
         <table className="data-table">
@@ -97,7 +119,6 @@ export default function ClientDetail() {
         </table>
       </div>
 
-      {/* INVOICES */}
       <div className="card" style={{ marginBottom: 16 }}>
         <h3>Invoices</h3>
         <table className="data-table">
@@ -126,7 +147,6 @@ export default function ClientDetail() {
         </table>
       </div>
 
-      {/* PAYMENTS */}
       <div className="card">
         <h3>Payments</h3>
         <table className="data-table">

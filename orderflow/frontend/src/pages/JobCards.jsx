@@ -2,18 +2,18 @@ import { useEffect, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import toast from 'react-hot-toast'
 import { getJobCards, getJobCard, updateJobCardStatus, addActivity } from '../api/client'
-import { Badge, Modal, DetailRow, Pipeline, fmt, fmtN, Spinner } from '../components/UI'
+import { Badge, Modal, DetailRow, Pipeline, fmtN, Spinner, formatDateDisplay } from '../components/UI'
 import { printJobCard } from '../components/PrintTemplates'
 
 const ACTIVITY_TYPES = [
   { key: 'STEREO_AVAILABLE', label: 'Stereo available' },
-  { key: 'MATERIAL',         label: 'Material issued' },
-  { key: 'CUTTING',          label: 'Cutting' },
-  { key: 'PRINTING',         label: 'Printing' },
-  { key: 'STITCHING',        label: 'Stitching' },
-  { key: 'HANDLE',           label: 'Handle attachment' },
+  { key: 'MATERIAL', label: 'Material issued' },
+  { key: 'CUTTING', label: 'Cutting' },
+  { key: 'PRINTING', label: 'Printing' },
+  { key: 'STITCHING', label: 'Stitching' },
+  { key: 'HANDLE', label: 'Handle attachment' },
   { key: 'QC_CHECK_PACKING', label: 'QC check & packing' },
-  { key: 'DELIVERY',         label: 'Delivery' },
+  { key: 'DELIVERY', label: 'Delivery' },
 ]
 
 const PrintIcon = () => (
@@ -22,19 +22,46 @@ const PrintIcon = () => (
   </svg>
 )
 
-// ── Job Cards List ────────────────────────────────────────
 export function JobCardsList() {
   const [jcs, setJcs] = useState([])
   const [loading, setLoading] = useState(true)
+  const [query, setQuery] = useState('')
+  const [statusFilter, setStatusFilter] = useState('ALL')
   const nav = useNavigate()
 
   useEffect(() => { getJobCards().then(setJcs).finally(() => setLoading(false)) }, [])
 
   if (loading) return <Spinner />
 
+  const filteredJobCards = jcs.filter(jc => {
+    const text = query.trim().toLowerCase()
+    const matchesQuery = !text || [jc.jobCardNo, jc.orderNo, jc.clientName, jc.productName, jc.sku]
+      .some(value => String(value || '').toLowerCase().includes(text))
+    const matchesStatus = statusFilter === 'ALL' || jc.status === statusFilter
+    return matchesQuery && matchesStatus
+  })
+
   return (
     <div className="page">
       <div className="page-header"><h1 className="page-title">Job cards</h1></div>
+      <div className="card" style={{ marginBottom: 14 }}>
+        <div className="form-grid">
+          <div className="field">
+            <label>Search</label>
+            <input value={query} onChange={e => setQuery(e.target.value)} placeholder="Job card, order, client, product" />
+          </div>
+          <div className="field">
+            <label>Status</label>
+            <select value={statusFilter} onChange={e => setStatusFilter(e.target.value)}>
+              <option value="ALL">All</option>
+              <option value="PENDING">Pending</option>
+              <option value="IN_PRODUCTION">In production</option>
+              <option value="COMPLETED">Completed</option>
+              <option value="CANCELLED">Cancelled</option>
+            </select>
+          </div>
+        </div>
+      </div>
       <div className="card" style={{ padding: 0 }}>
         <div className="table-wrap">
           <table className="data-table">
@@ -46,9 +73,9 @@ export function JobCardsList() {
               </tr>
             </thead>
             <tbody>
-              {!jcs.length
+              {!filteredJobCards.length
                 ? <tr><td colSpan="11" style={{ textAlign: 'center', padding: 24, color: 'var(--ink3)' }}>No job cards found</td></tr>
-                : jcs.map(jc => {
+                : filteredJobCards.map(jc => {
                   const lastStage = jc.doneStages?.length ? jc.doneStages[jc.doneStages.length - 1] : null
                   return (
                     <tr key={jc.id} className="clickable" onClick={() => nav(`/jobcards/${jc.id}`)}>
@@ -60,7 +87,7 @@ export function JobCardsList() {
                       <td><span className="tag">{jc.handle}</span></td>
                       <td>{fmtN(jc.qty)}</td>
                       <td>{lastStage ? <Badge status={lastStage} /> : <span className="text-muted text-small">Not started</span>}</td>
-                      <td className="text-muted text-small">{jc.dueDate}</td>
+                      <td className="text-muted text-small">{formatDateDisplay(jc.dueDate)}</td>
                       <td><Badge status={jc.status} /></td>
                       <td onClick={e => e.stopPropagation()}>
                         <button className="btn btn-sm" onClick={() => printJobCard(jc)} title="Print job card">
@@ -79,7 +106,6 @@ export function JobCardsList() {
   )
 }
 
-// ── Job Card Detail ───────────────────────────────────────
 export function JobCardDetail() {
   const { id } = useParams()
   const nav = useNavigate()
@@ -128,13 +154,11 @@ export function JobCardDetail() {
         </div>
       </div>
 
-      {/* Pipeline — full width */}
       <div className="card" style={{ marginBottom: 14 }}>
         <div className="card-title" style={{ marginBottom: 8 }}>Production stages</div>
         <Pipeline doneStages={jc.doneStages || []} />
       </div>
 
-      {/* Two-column detail */}
       <div className="detail-grid">
         <div className="card">
           <div className="card-title" style={{ marginBottom: 10 }}>Product & order spec</div>
@@ -152,17 +176,18 @@ export function JobCardDetail() {
           <DetailRow label="SKU" value={<span className="mono">{jc.sku}</span>} />
           <DetailRow label="Size" value={jc.size} />
           <DetailRow label="Handle" value={<span className="tag">{jc.handle}</span>} />
+          <DetailRow label="Wt (in grams)" value={<span style={{ fontWeight: 600 }}>{fmtN(jc.weightGrams || 0)}</span>} />
           <DetailRow label="Quantity" value={<span style={{ fontWeight: 700 }}>{fmtN(jc.qty)} pcs</span>} />
+          <DetailRow label="Material req." value={<span style={{ fontWeight: 600 }}>{Number(jc.materialRequiredKg || 0).toLocaleString('en-IN', { maximumFractionDigits: 3 })} kg</span>} />
           {jc.spec && <DetailRow label="Spec" value={<span className="text-muted">{jc.spec}</span>} />}
           {jc.stereoRef && <DetailRow label="Stereo ref" value={<span className="mono">{jc.stereoRef}</span>} />}
           <DetailRow label="Start date" value={jc.startDate} />
-          <DetailRow label="Due date" value={<span style={{ fontWeight: 500 }}>{jc.dueDate}</span>} />
+          <DetailRow label="Due date" value={<span style={{ fontWeight: 500 }}>{formatDateDisplay(jc.dueDate)}</span>} />
           {jc.instructions && (
             <DetailRow label="Instructions" value={<span className="text-muted">{jc.instructions}</span>} />
           )}
         </div>
 
-        {/* Activity log */}
         <div className="card">
           <div className="card-header">
             <div className="card-title">Activity log ({jc.activities?.length || 0})</div>
@@ -184,7 +209,8 @@ export function JobCardDetail() {
                     {a.activityTime ? a.activityTime.slice(0, 16).replace('T', ' ') : ''}
                   </span>
                 </div>
-                <div className="activity-desc">{a.description}</div>
+                <div className="activity-desc">{a.description || 'No description'}</div>
+                {a.qty ? <div className="activity-notes">Qty: {fmtN(a.qty)}</div> : null}
                 {a.notes && <div className="activity-notes">{a.notes}</div>}
               </div>
             ))
@@ -192,18 +218,17 @@ export function JobCardDetail() {
         </div>
       </div>
 
-      {/* Full activity table */}
       {jc.activities?.length > 0 && (
         <div className="card" style={{ marginTop: 14 }}>
           <div className="card-header">
-            <div className="card-title">All activities — timeline</div>
+            <div className="card-title">All activities - timeline</div>
           </div>
           <div className="table-wrap">
             <table className="data-table">
               <thead>
                 <tr>
                   <th>#</th><th>Date / time</th><th>Stage</th>
-                  <th>Description</th><th>Performed by</th><th>Notes</th>
+                  <th>Description</th><th>Qty</th><th>Performed by</th><th>Notes</th>
                 </tr>
               </thead>
               <tbody>
@@ -211,12 +236,13 @@ export function JobCardDetail() {
                   <tr key={a.id}>
                     <td className="text-muted">{i + 1}</td>
                     <td className="mono text-muted" style={{ fontSize: 11 }}>
-                      {a.activityTime ? a.activityTime.slice(0, 16).replace('T', ' ') : '—'}
+                      {a.activityTime ? a.activityTime.slice(0, 16).replace('T', ' ') : '-'}
                     </td>
                     <td><Badge status={a.activityType} /></td>
-                    <td style={{ fontWeight: 500 }}>{a.description}</td>
-                    <td className="text-muted">{a.performedBy || '—'}</td>
-                    <td className="text-muted">{a.notes || '—'}</td>
+                    <td style={{ fontWeight: 500 }}>{a.description || '-'}</td>
+                    <td className="text-muted">{a.qty ? fmtN(a.qty) : '-'}</td>
+                    <td className="text-muted">{a.performedBy || '-'}</td>
+                    <td className="text-muted">{a.notes || '-'}</td>
                   </tr>
                 ))}
               </tbody>
@@ -232,11 +258,11 @@ export function JobCardDetail() {
   )
 }
 
-// ── Log Activity Modal ────────────────────────────────────
 function ActivityModal({ jcId, onSave, onClose }) {
   const [form, setForm] = useState({
     activityType: 'STEREO_AVAILABLE',
     description: '',
+    qty: '',
     performedBy: '',
     notes: '',
   })
@@ -244,10 +270,12 @@ function ActivityModal({ jcId, onSave, onClose }) {
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }))
 
   const save = async () => {
-    if (!form.description.trim()) { toast.error('Description is required'); return }
     setSaving(true)
     try {
-      const updated = await addActivity(jcId, form)
+      const updated = await addActivity(jcId, {
+        ...form,
+        qty: form.qty === '' ? null : parseInt(form.qty),
+      })
       onSave(updated)
     } catch { }
     finally { setSaving(false) }
@@ -263,6 +291,16 @@ function ActivityModal({ jcId, onSave, onClose }) {
           </select>
         </div>
         <div className="field">
+          <label>Qty</label>
+          <input
+            type="number"
+            min="0"
+            value={form.qty}
+            onChange={e => set('qty', e.target.value)}
+            placeholder="Optional quantity"
+          />
+        </div>
+        <div className="field">
           <label>Performed by</label>
           <input
             value={form.performedBy}
@@ -271,11 +309,11 @@ function ActivityModal({ jcId, onSave, onClose }) {
           />
         </div>
         <div className="field field-full">
-          <label>Description *</label>
+          <label>Description</label>
           <input
             value={form.description}
             onChange={e => set('description', e.target.value)}
-            placeholder="What was done? (e.g. Cutting completed 5000 pcs)"
+            placeholder="Optional description"
             autoFocus
           />
         </div>
@@ -292,7 +330,7 @@ function ActivityModal({ jcId, onSave, onClose }) {
       <div className="modal-footer">
         <button className="btn" onClick={onClose}>Cancel</button>
         <button className="btn btn-primary" onClick={save} disabled={saving}>
-          {saving ? 'Saving…' : 'Log activity'}
+          {saving ? 'Saving...' : 'Log activity'}
         </button>
       </div>
     </Modal>

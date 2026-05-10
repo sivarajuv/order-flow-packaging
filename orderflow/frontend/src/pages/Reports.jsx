@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { getClients, getOrders, getInvoices, getPayments } from '../api/client'
 import { Badge, GstBadge, fmt, Spinner, PrintIcon } from '../components/UI'
-import { printReports, printClientLedger } from '../components/PrintTemplates'
+import { printReports, printClientLedger, downloadClientLedgerPdf, shareClientLedgerOnWhatsApp } from '../components/PrintTemplates'
 
 export default function Reports() {
   const [data,     setData]     = useState(null)
@@ -23,7 +23,12 @@ export default function Reports() {
   const totalCY      = clients.reduce((s,c) => s + (c.cyOutstanding||0), 0)
   const totalPY      = clients.reduce((s,c) => s + (c.pyOutstanding||0), 0)
   const totalPaid    = payments.reduce((s,p) => s + (p.amount||0), 0)
-  const totalOrderVal= orders.reduce((s,o)   => s + (o.subtotal||0), 0)
+  const totalInvoiceVal= invoices.reduce((s,i)   => s + (i.total||0), 0)
+  const invoiceAmountByOrderId = invoices.reduce((acc, inv) => {
+    if (inv.orderId == null) return acc
+    acc[inv.orderId] = (acc[inv.orderId] || 0) + (inv.total || 0)
+    return acc
+  }, {})
 
   /* ── ledger helpers ─────────────────────────────────── */
   const ledgerClient = ledgerId ? clients.find(c => c.id === ledgerId) : null
@@ -104,9 +109,17 @@ export default function Reports() {
             </button>
           )}
           {tab === 'ledger' && ledgerClient && (
-            <button className="btn" onClick={() => printClientLedger(ledgerClient, currentLedger, totalDebits, totalCredits, closingBalance)}>
-              <PrintIcon /> Print ledger
-            </button>
+            <>
+              <button className="btn" onClick={() => downloadClientLedgerPdf(ledgerClient, currentLedger, totalDebits, totalCredits, closingBalance)}>
+                Download PDF
+              </button>
+              <button className="btn" onClick={() => shareClientLedgerOnWhatsApp(ledgerClient, currentLedger, totalDebits, totalCredits, closingBalance)}>
+                Share WhatsApp
+              </button>
+              <button className="btn" onClick={() => printClientLedger(ledgerClient, currentLedger, totalDebits, totalCredits, closingBalance)}>
+                <PrintIcon /> Print ledger
+              </button>
+            </>
           )}
         </div>
       </div>
@@ -122,8 +135,8 @@ export default function Reports() {
         <>
           <div className="metrics-row">
             <div className="metric-card">
-              <div className="metric-label">Total order value</div>
-              <div className="metric-value">{fmt(totalOrderVal)}</div>
+              <div className="metric-label">Total invoice value</div>
+              <div className="metric-value">{fmt(totalInvoiceVal)}</div>
             </div>
             <div className="metric-card">
               <div className="metric-label">Payments received</div>
@@ -143,7 +156,7 @@ export default function Reports() {
             <div className="card">
               <div className="card-title" style={{marginBottom:10}}>Order status summary</div>
               <table className="data-table">
-                <thead><tr><th>Status</th><th>Count</th><th>Value</th></tr></thead>
+                <thead><tr><th>Status</th><th>Count</th><th>Invoice amount</th></tr></thead>
                 <tbody>
                   {['NEW','IN_PRODUCTION','INVOICED','COMPLETED','CANCELLED'].map(st => {
                     const g = orders.filter(o => o.status === st)
@@ -151,12 +164,12 @@ export default function Reports() {
                       <tr key={st}>
                         <td><Badge status={st}/></td>
                         <td style={{fontWeight:600}}>{g.length}</td>
-                        <td style={{fontWeight:600}}>{fmt(g.reduce((s,o)=>s+(o.subtotal||0),0))}</td>
+                        <td style={{fontWeight:600}}>{fmt(g.reduce((s,o)=>s+(invoiceAmountByOrderId[o.id]||0),0))}</td>
                       </tr>
                     )
                   })}
                   <tr style={{background:'var(--bg)',fontWeight:700}}>
-                    <td>Total</td><td>{orders.length}</td><td>{fmt(totalOrderVal)}</td>
+                    <td>Total</td><td>{orders.length}</td><td>{fmt(totalInvoiceVal)}</td>
                   </tr>
                 </tbody>
               </table>
@@ -257,13 +270,26 @@ export default function Reports() {
                 </span>
               )}
               {ledgerClient && (
-                <button
-                  className="btn btn-sm"
-                  style={{ marginLeft:'auto' }}
-                  onClick={() => printClientLedger(ledgerClient, currentLedger, totalDebits, totalCredits, closingBalance)}
-                >
-                  <PrintIcon /> Print ledger
-                </button>
+                <div style={{ marginLeft:'auto', display:'flex', gap:8, flexWrap:'wrap' }}>
+                  <button
+                    className="btn btn-sm"
+                    onClick={() => downloadClientLedgerPdf(ledgerClient, currentLedger, totalDebits, totalCredits, closingBalance)}
+                  >
+                    Download PDF
+                  </button>
+                  <button
+                    className="btn btn-sm"
+                    onClick={() => shareClientLedgerOnWhatsApp(ledgerClient, currentLedger, totalDebits, totalCredits, closingBalance)}
+                  >
+                    Share WhatsApp
+                  </button>
+                  <button
+                    className="btn btn-sm"
+                    onClick={() => printClientLedger(ledgerClient, currentLedger, totalDebits, totalCredits, closingBalance)}
+                  >
+                    <PrintIcon /> Print ledger
+                  </button>
+                </div>
               )}
             </div>
           </div>

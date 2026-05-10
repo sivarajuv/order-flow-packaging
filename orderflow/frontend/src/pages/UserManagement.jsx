@@ -39,6 +39,8 @@ export default function UserManagement() {
   const [saving, setSaving] = useState(false)
   const [form, setForm] = useState({ username: '', fullName: '', role: 'SALES', password: '', confirmPw: '' })
   const [pwForm, setPwForm] = useState({ currentPassword: '', newPassword: '', confirmPw: '' })
+  const [query, setQuery] = useState('')
+  const [roleFilter, setRoleFilter] = useState('ALL')
 
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }))
   const setPw = (k, v) => setPwForm(f => ({ ...f, [k]: v }))
@@ -175,6 +177,14 @@ export default function UserManagement() {
 
   if (loading) return <Spinner />
 
+  const filteredUsers = (Array.isArray(users) ? users : []).filter(u => {
+    const text = query.trim().toLowerCase()
+    const matchesQuery = !text || [u.username, u.fullName, u.role]
+      .some(value => String(value || '').toLowerCase().includes(text))
+    const matchesRole = roleFilter === 'ALL' || u.role === roleFilter
+    return matchesQuery && matchesRole
+  })
+
   return (
     <div className="page">
       <div className="page-header">
@@ -203,6 +213,22 @@ export default function UserManagement() {
         })}
       </div>
 
+      <div className="card" style={{ marginBottom: 14 }}>
+        <div className="form-grid">
+          <div className="field">
+            <label>Search</label>
+            <input value={query} onChange={e => setQuery(e.target.value)} placeholder="Username, name, role" />
+          </div>
+          <div className="field">
+            <label>Role</label>
+            <select value={roleFilter} onChange={e => setRoleFilter(e.target.value)}>
+              <option value="ALL">All</option>
+              {ROLE_OPTS.map(r => <option key={r.value} value={r.value}>{r.label}</option>)}
+            </select>
+          </div>
+        </div>
+      </div>
+
       <div className="card" style={{ padding: 0 }}>
         <div className="table-wrap">
           <table className="data-table">
@@ -210,7 +236,7 @@ export default function UserManagement() {
               <tr><th>User</th><th>Username</th><th>Role</th><th>Status</th><th style={{ width: 160 }}>Actions</th></tr>
             </thead>
             <tbody>
-              {Array.isArray(users) && users.map(u => (
+              {filteredUsers.map(u => (
                 <tr key={u.id} style={{ opacity: u.active ? 1 : 0.55 }}>
                   <td>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 9 }}>

@@ -1,22 +1,29 @@
 import { useEffect, useState } from 'react'
-import { useNavigate, useParams } from 'react-router-dom'
+import { useLocation, useNavigate, useParams } from 'react-router-dom'
 import toast from 'react-hot-toast'
 import {
   getOrders, getOrder, createOrder, updateOrder, updateOrderStatus,
   updateOrderLine, getClients, getClientProducts, createInvoice,
 } from '../api/client'
-import { Badge, GstBadge, Modal, DetailRow, fmt, fmtN, today, addDays, Spinner, PrintIcon } from '../components/UI'
+import { Badge, GstBadge, Modal, DetailRow, fmt, fmtN, today, addDays, Spinner, PrintIcon, formatDateDisplay } from '../components/UI'
 import { printOrder } from '../components/PrintTemplates'
 
 export function OrdersList() {
   const [orders, setOrders] = useState([])
   const [loading, setLoading] = useState(true)
   const [showCreate, setShowCreate] = useState(false)
+  const [query, setQuery] = useState('')
+  const [statusFilter, setStatusFilter] = useState('ALL')
   const nav = useNavigate()
+  const loc = useLocation()
 
   useEffect(() => {
     getOrders().then(o => setOrders([...o].reverse())).finally(() => setLoading(false))
   }, [])
+
+  useEffect(() => {
+    if (loc.state?.clientId) setShowCreate(true)
+  }, [loc.state])
 
   const created = o => {
     setOrders(p => [o, ...p])
@@ -27,11 +34,38 @@ export function OrdersList() {
 
   if (loading) return <Spinner />
 
+  const filteredOrders = orders.filter(o => {
+    const text = query.trim().toLowerCase()
+    const matchesQuery = !text || [o.orderNo, o.clientName, o.salesperson]
+      .some(value => String(value || '').toLowerCase().includes(text))
+    const matchesStatus = statusFilter === 'ALL' || o.status === statusFilter
+    return matchesQuery && matchesStatus
+  })
+
   return (
     <div className="page">
       <div className="page-header">
         <h1 className="page-title">Sales orders</h1>
         <button className="btn btn-primary" onClick={() => setShowCreate(true)}>+ New order</button>
+      </div>
+      <div className="card" style={{ marginBottom: 14 }}>
+        <div className="form-grid">
+          <div className="field">
+            <label>Search</label>
+            <input value={query} onChange={e => setQuery(e.target.value)} placeholder="Order no., client, salesperson" />
+          </div>
+          <div className="field">
+            <label>Status</label>
+            <select value={statusFilter} onChange={e => setStatusFilter(e.target.value)}>
+              <option value="ALL">All</option>
+              <option value="NEW">New</option>
+              <option value="IN_PRODUCTION">In production</option>
+              <option value="INVOICED">Invoiced</option>
+              <option value="COMPLETED">Completed</option>
+              <option value="CANCELLED">Cancelled</option>
+            </select>
+          </div>
+        </div>
       </div>
       <div className="card" style={{ padding: 0 }}>
         <div className="table-wrap">
@@ -40,13 +74,13 @@ export function OrdersList() {
               <tr><th>Order no.</th><th>Client</th><th>Salesperson</th><th>Order date</th><th>Delivery date</th><th>Lines</th><th>Total</th><th>Status</th><th></th></tr>
             </thead>
             <tbody>
-              {orders.map(o => (
+              {filteredOrders.map(o => (
                 <tr key={o.id} className="clickable" onClick={() => nav(`/orders/${o.id}`)}>
                   <td className="mono fw-600">{o.orderNo}</td>
                   <td style={{ fontWeight: 500 }}>{o.clientName}</td>
                   <td className="text-muted">{o.salesperson}</td>
-                  <td className="text-muted text-small">{o.orderDate}</td>
-                  <td className="text-muted text-small">{o.deliveryDate || '-'}</td>
+                  <td className="text-muted text-small">{formatDateDisplay(o.orderDate)}</td>
+                  <td className="text-muted text-small">{formatDateDisplay(o.deliveryDate)}</td>
                   <td className="text-muted">{o.lines?.length ?? 0}</td>
                   <td style={{ fontWeight: 600 }}>{fmt(o.subtotal)}</td>
                   <td><Badge status={o.status} /></td>
@@ -66,7 +100,13 @@ export function OrdersList() {
           </table>
         </div>
       </div>
-      {showCreate && <CreateOrderModal onSave={created} onClose={() => setShowCreate(false)} />}
+      {showCreate && (
+        <CreateOrderModal
+          prefillClientId={loc.state?.clientId}
+          onSave={created}
+          onClose={() => setShowCreate(false)}
+        />
+      )}
     </div>
   )
 }
@@ -181,12 +221,12 @@ export function OrderDetail() {
           <DetailRow label="Order date" value={
             editHeader
               ? <input className="cell-input" type="date" style={{ width: 140 }} value={headerForm.orderDate} onChange={e => setHeaderForm(f => ({ ...f, orderDate: e.target.value }))} />
-              : order.orderDate
+              : formatDateDisplay(order.orderDate)
           } />
           <DetailRow label="Delivery date" value={
             editHeader
               ? <input className="cell-input" type="date" style={{ width: 140 }} value={headerForm.deliveryDate} onChange={e => setHeaderForm(f => ({ ...f, deliveryDate: e.target.value }))} />
-              : order.deliveryDate || '-'
+              : formatDateDisplay(order.deliveryDate)
           } />
           <DetailRow label="Notes" value={
             editHeader
@@ -309,9 +349,9 @@ export function OrderDetail() {
   )
 }
 
-function CreateOrderModal({ onSave, onClose }) {
+function CreateOrderModal({ prefillClientId, onSave, onClose }) {
   const [clients, setClients] = useState([])
-  const [clientId, setClientId] = useState('')
+  const [clientId, setClientId] = useState(prefillClientId ? String(prefillClientId) : '')
   const [cps, setCps] = useState([])
   const [form, setForm] = useState({ orderDate: today(), deliveryDate: '', notes: '' })
   const [lines, setLines] = useState([{ _id: 1, cpId: '', qty: 1000, salesQty: 1000, unitPrice: '', discount: 0, spec: '' }])
@@ -321,9 +361,9 @@ function CreateOrderModal({ onSave, onClose }) {
     getClients().then(c => {
       const a = c.filter(x => x.status === 'ACTIVE')
       setClients(a)
-      if (a.length) setClientId(String(a[0].id))
+      if (!prefillClientId && a.length) setClientId(String(a[0].id))
     })
-  }, [])
+  }, [prefillClientId])
 
   useEffect(() => {
     if (!clientId) return
@@ -432,14 +472,20 @@ function CreateOrderModal({ onSave, onClose }) {
 }
 
 function CreateInvoiceModal({ order, onSave, onClose }) {
-  const [form, setForm] = useState({ invoiceDate: today(), dueDate: addDays(today(), 30), gstOverride: '' })
+  const [form, setForm] = useState({ invoiceDate: today(), dueDate: addDays(today(), 30), gstOverride: '', invoiceDiscount: '' })
   const [saving, setSaving] = useState(false)
   const effectiveGst = form.gstOverride !== '' ? parseInt(form.gstOverride) : (order.clientGstPercent || 0)
+  const placeOfSupply = (order.placeOfSupply || '').trim()
+  const normalizedPlaceOfSupply = placeOfSupply.toUpperCase()
+  const isInterState = normalizedPlaceOfSupply && normalizedPlaceOfSupply !== 'MAHARASHTRA' && !normalizedPlaceOfSupply.startsWith('27')
   const lines = order.lines || []
-  const discountTotal = lines.reduce((s, l) => s + (l.discountAmount || 0), 0)
+  const lineDiscountTotal = lines.reduce((s, l) => s + (l.discountAmount || 0), 0)
+  const invoiceDiscount = parseFloat(form.invoiceDiscount) || 0
+  const discountTotal = lineDiscountTotal + invoiceDiscount
   const subtotal = lines.reduce((s, l) => s + (l.taxableAmount || 0), 0)
   const tax = subtotal * effectiveGst / 100
-  const total = subtotal + tax
+  const splitTax = tax / 2
+  const total = Math.max(subtotal + tax - invoiceDiscount, 0)
 
   const save = async () => {
     setSaving(true)
@@ -449,6 +495,7 @@ function CreateInvoiceModal({ order, onSave, onClose }) {
         invoiceDate: form.invoiceDate,
         dueDate: form.dueDate,
         gstOverride: form.gstOverride !== '' ? parseInt(form.gstOverride) : null,
+        invoiceDiscount,
       })
       onSave(inv)
     } finally {
@@ -458,16 +505,20 @@ function CreateInvoiceModal({ order, onSave, onClose }) {
 
   return (
     <Modal title={`Create invoice - ${order.orderNo}`} onClose={onClose}>
-      <p style={{ fontSize: 12, color: 'var(--ink2)', marginBottom: 14 }}>Client: <strong>{order.clientName}</strong> | Default GST: <strong>{order.clientGstPercent}%</strong></p>
+      <p style={{ fontSize: 12, color: 'var(--ink2)', marginBottom: 14 }}>
+        Client: <strong>{order.clientName}</strong> | Default GST: <strong>{order.clientGstPercent}%</strong> | Place of supply: <strong>{order.placeOfSupply || 'Maharashtra'}</strong>
+      </p>
       <div className="form-grid">
         <div className="field"><label>Invoice date</label><input type="date" value={form.invoiceDate} onChange={e => setForm(f => ({ ...f, invoiceDate: e.target.value }))} /></div>
         <div className="field"><label>Due date</label><input type="date" value={form.dueDate} onChange={e => setForm(f => ({ ...f, dueDate: e.target.value }))} /></div>
+        <div className="field"><label>Invoice discount (Rs)</label><input type="number" min="0" step="0.01" value={form.invoiceDiscount} onChange={e => setForm(f => ({ ...f, invoiceDiscount: e.target.value }))} /></div>
         <div className="field field-full"><label>GST rate override</label>
           <select value={form.gstOverride} onChange={e => setForm(f => ({ ...f, gstOverride: e.target.value }))}>
             <option value="">Use client default ({order.clientGstPercent}%)</option>
             <option value="0">0% - GST exempt</option>
             <option value="5">5%</option>
             <option value="18">18%</option>
+            <option value="28">28%</option>
           </select>
         </div>
       </div>
@@ -475,7 +526,6 @@ function CreateInvoiceModal({ order, onSave, onClose }) {
       <table style={{ width: '100%', fontSize: 12, borderCollapse: 'collapse' }}>
         <thead><tr style={{ borderBottom: '1px solid var(--border)' }}>
           <th style={{ textAlign: 'left', padding: '4px 0', color: 'var(--ink2)', fontSize: 10, fontWeight: 600 }}>Product</th>
-          <th style={{ textAlign: 'right', padding: '4px 0', color: 'var(--ink2)', fontSize: 10, fontWeight: 600 }}>Ordered</th>
           <th style={{ textAlign: 'right', padding: '4px 0', color: 'var(--ink2)', fontSize: 10, fontWeight: 600 }}>Sales</th>
           <th style={{ textAlign: 'right', padding: '4px 0', color: 'var(--ink2)', fontSize: 10, fontWeight: 600 }}>Rate</th>
           <th style={{ textAlign: 'right', padding: '4px 0', color: 'var(--ink2)', fontSize: 10, fontWeight: 600 }}>Discount</th>
@@ -484,7 +534,6 @@ function CreateInvoiceModal({ order, onSave, onClose }) {
         <tbody>
           {lines.map(l => <tr key={l.id} style={{ borderBottom: '1px solid var(--border)' }}>
             <td style={{ padding: '5px 0' }}>{l.productName}</td>
-            <td style={{ textAlign: 'right', padding: '5px 0', color: 'var(--ink2)' }}>{fmtN(l.orderedQty ?? l.qty)}</td>
             <td style={{ textAlign: 'right', padding: '5px 0', color: 'var(--ink2)' }}>{fmtN(l.salesQty ?? l.qty)}</td>
             <td style={{ textAlign: 'right', padding: '5px 0', color: 'var(--ink2)' }}>{fmt(l.unitPrice)}</td>
             <td style={{ textAlign: 'right', padding: '5px 0', color: 'var(--ink2)' }}>{Number(l.discount || 0).toLocaleString('en-IN', { maximumFractionDigits: 2 })}%</td>
@@ -493,9 +542,19 @@ function CreateInvoiceModal({ order, onSave, onClose }) {
         </tbody>
       </table>
       <div style={{ background: 'var(--bg)', borderRadius: 'var(--r)', padding: '10px 12px', marginTop: 8, fontSize: 12 }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', padding: '2px 0' }}><span className="text-muted">Discount</span><span>{fmt(discountTotal)}</span></div>
+        <div style={{ display: 'flex', justifyContent: 'space-between', padding: '2px 0' }}><span className="text-muted">Line discount</span><span>{fmt(lineDiscountTotal)}</span></div>
+        <div style={{ display: 'flex', justifyContent: 'space-between', padding: '2px 0' }}><span className="text-muted">Invoice discount</span><span>{fmt(invoiceDiscount)}</span></div>
+        <div style={{ display: 'flex', justifyContent: 'space-between', padding: '2px 0' }}><span className="text-muted">Total discount</span><span>{fmt(discountTotal)}</span></div>
         <div style={{ display: 'flex', justifyContent: 'space-between', padding: '2px 0' }}><span className="text-muted">Subtotal</span><span>{fmt(subtotal)}</span></div>
-        <div style={{ display: 'flex', justifyContent: 'space-between', padding: '2px 0' }}><span className="text-muted">GST {effectiveGst}%</span><span>{fmt(tax)}</span></div>
+        <div style={{ display: 'flex', justifyContent: 'space-between', padding: '2px 0' }}><span className="text-muted">Tax mode</span><span>{isInterState ? 'Interstate (IGST)' : 'Intrastate (CGST + SGST)'}</span></div>
+        {isInterState ? (
+          <div style={{ display: 'flex', justifyContent: 'space-between', padding: '2px 0' }}><span className="text-muted">IGST {effectiveGst}%</span><span>{fmt(tax)}</span></div>
+        ) : (
+          <>
+            <div style={{ display: 'flex', justifyContent: 'space-between', padding: '2px 0' }}><span className="text-muted">CGST {effectiveGst / 2}%</span><span>{fmt(splitTax)}</span></div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', padding: '2px 0' }}><span className="text-muted">SGST {effectiveGst / 2}%</span><span>{fmt(splitTax)}</span></div>
+          </>
+        )}
         <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 700, fontSize: 14, borderTop: '1px solid var(--border)', marginTop: 5, paddingTop: 6 }}><span>Total</span><span>{fmt(total)}</span></div>
       </div>
       <div className="modal-footer">

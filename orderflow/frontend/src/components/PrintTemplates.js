@@ -59,11 +59,40 @@ const open = html => {
   setTimeout(() => { w.focus(); w.print() }, 500)
 }
 
+const downloadFile = (blob, filename) => {
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = filename
+  document.body.appendChild(a)
+  a.click()
+  a.remove()
+  setTimeout(() => URL.revokeObjectURL(url), 1000)
+}
+
 const fmt = n => n == null ? '-' : 'Rs ' + Number(n).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 const fmtN = n => Number(n || 0).toLocaleString('en-IN')
-const stamp = () => new Date().toLocaleDateString('en-IN', { dateStyle: 'long' })
+const stamp = () => fmtDate(new Date().toISOString().slice(0, 10))
 const pct = v => `${Number(v || 0).toLocaleString('en-IN', { maximumFractionDigits: 2 })}%`
 const esc = value => String(value ?? '').replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;')
+const fmtDate = value => {
+  if (!value) return '-'
+  const parts = String(value).split('-')
+  if (parts.length === 3) return `${parts[2]}-${parts[1]}-${parts[0]}`
+  return esc(value)
+}
+const splitGstPercent = pct => Number(pct || 0) / 2
+const splitGstAmount = tax => Number(tax || 0) / 2
+const printDiscount = value => Number(value || 0) > 0 ? pct(value) : '-'
+const slug = value => String(value || 'document').trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '') || 'document'
+const discountPctOnInvoiceAmount = inv => {
+  const subtotal = Number(inv?.subtotal || 0)
+  const taxTotal = Number(inv?.taxTotal || 0)
+  const invoiceDiscount = Number(inv?.invoiceDiscount || 0)
+  const grossInvoiceAmount = subtotal + taxTotal
+  if (grossInvoiceAmount <= 0 || invoiceDiscount <= 0) return '0%'
+  return `${((invoiceDiscount / grossInvoiceAmount) * 100).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}%`
+}
 
 const companyHeader = title => `
   <div class="doc-header">
@@ -75,6 +104,146 @@ const companyHeader = title => `
     <div class="doc-meta">Printed: ${stamp()}</div>
   </div>
 `
+
+const pdfEscape = value => String(value ?? '')
+  .replaceAll('\\', '\\\\')
+  .replaceAll('(', '\\(')
+  .replaceAll(')', '\\)')
+
+const wrapText = (text, maxChars = 78) => {
+  const words = String(text || '').split(/\s+/).filter(Boolean)
+  if (!words.length) return ['']
+  const lines = []
+  let current = words[0]
+  for (let i = 1; i < words.length; i += 1) {
+    const next = `${current} ${words[i]}`
+    if (next.length <= maxChars) current = next
+    else {
+      lines.push(current)
+      current = words[i]
+    }
+  }
+  lines.push(current)
+  return lines
+}
+
+const buildSimplePdf = pages => {
+  const objects = []
+  const addObject = value => {
+    objects.push(value)
+    return objects.length
+  }
+
+  const fontId = addObject('<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>')
+  const boldFontId = addObject('<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold >>')
+
+  const pageIds = []
+  const contentIds = []
+
+  pages.forEach(lines => {
+    const streamLines = ['BT']
+    lines.forEach(line => {
+      if (line.font === 'bold') streamLines.push('/F2 11 Tf')
+      else streamLines.push('/F1 10 Tf')
+      streamLines.push(`1 0 0 1 ${line.x} ${line.y} Tm (${pdfEscape(line.text)}) Tj`)
+    })
+    streamLines.push('ET')
+    const content = streamLines.join('\n')
+    const contentId = addObject(`<< /Length ${content.length} >>\nstream\n${content}\nendstream`)
+    contentIds.push(contentId)
+    pageIds.push(addObject(''))
+  })
+
+  const pagesId = addObject('')
+
+  pageIds.forEach((pageId, index) => {
+    objects[pageId - 1] = `<< /Type /Page /Parent ${pagesId} 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 ${fontId} 0 R /F2 ${boldFontId} 0 R >> >> /Contents ${contentIds[index]} 0 R >>`
+  })
+
+  objects[pagesId - 1] = `<< /Type /Pages /Kids [${pageIds.map(id => `${id} 0 R`).join(' ')}] /Count ${pageIds.length} >>`
+  const catalogId = addObject(`<< /Type /Catalog /Pages ${pagesId} 0 R >>`)
+
+  let pdf = '%PDF-1.4\n'
+  const offsets = [0]
+  objects.forEach((obj, index) => {
+    offsets.push(pdf.length)
+    pdf += `${index + 1} 0 obj\n${obj}\nendobj\n`
+  })
+  const xrefStart = pdf.length
+  pdf += `xref\n0 ${objects.length + 1}\n`
+  pdf += '0000000000 65535 f \n'
+  for (let i = 1; i < offsets.length; i += 1) {
+    pdf += `${String(offsets[i]).padStart(10, '0')} 00000 n \n`
+  }
+  pdf += `trailer\n<< /Size ${objects.length + 1} /Root ${catalogId} 0 R >>\nstartxref\n${xrefStart}\n%%EOF`
+  return new Blob([pdf], { type: 'application/pdf' })
+}
+
+const ledgerPdfPages = (client, ledger, totalDebits, totalCredits, closingBalance) => {
+  const lines = []
+  const push = (text, x, y, font = 'normal') => lines.push({ text, x, y, font })
+  const startY = 800
+  const lineStep = 14
+  let y = startY
+
+  push(COMPANY.name, 40, y, 'bold'); y -= 18
+  push('Client Ledger', 40, y, 'bold'); y -= 20
+  push(`Printed: ${stamp()}`, 420, 800)
+  push(`Client: ${client.name}`, 40, y); y -= lineStep
+  push(`Code: ${client.code || '-'}`, 40, y)
+  push(`GST No: ${client.gstNo || '-'}`, 220, y)
+  push(`Closing Balance: ${fmt(closingBalance)}`, 390, y)
+  y -= 24
+
+  const headerY = y
+  push('Date', 40, headerY, 'bold')
+  push('Reference', 105, headerY, 'bold')
+  push('Description', 200, headerY, 'bold')
+  push('Debit', 420, headerY, 'bold')
+  push('Credit', 485, headerY, 'bold')
+  push('Balance', 540, headerY, 'bold')
+  y -= 16
+
+  const pages = []
+  const flushPage = () => {
+    pages.push([...lines])
+    lines.length = 0
+    y = startY
+    push(COMPANY.name, 40, y, 'bold'); y -= 18
+    push('Client Ledger', 40, y, 'bold'); y -= 20
+    push(`Client: ${client.name}`, 40, y)
+    push(`Printed: ${stamp()}`, 420, y)
+    y -= 24
+    push('Date', 40, y, 'bold')
+    push('Reference', 105, y, 'bold')
+    push('Description', 200, y, 'bold')
+    push('Debit', 420, y, 'bold')
+    push('Credit', 485, y, 'bold')
+    push('Balance', 540, y, 'bold')
+    y -= 16
+  }
+
+  ;(ledger || []).forEach(row => {
+    const wrappedDesc = wrapText(row.desc || '-', 38)
+    const blockHeight = wrappedDesc.length * lineStep + 4
+    if (y - blockHeight < 70) flushPage()
+    push(row.date || '-', 40, y)
+    push(row.ref || '-', 105, y)
+    wrappedDesc.forEach((part, idx) => push(part, 200, y - (idx * lineStep)))
+    push(row.debit ? fmt(row.debit) : '-', 420, y)
+    push(row.credit ? fmt(row.credit) : '-', 485, y)
+    push(fmt(row.balance), 540, y)
+    y -= blockHeight
+  })
+
+  if (y < 90) flushPage()
+  push(`Total Debits: ${fmt(totalDebits)}`, 40, y, 'bold'); y -= lineStep
+  push(`Total Credits: ${fmt(totalCredits)}`, 40, y, 'bold'); y -= lineStep
+  push(`Closing Balance: ${fmt(closingBalance)}`, 40, y, 'bold')
+
+  pages.push([...lines])
+  return pages
+}
 
 const orderLineAmount = l => Number(l.lineTotal ?? (((l.salesQty ?? l.qty ?? 0) * (l.unitPrice ?? 0)) * (1 - ((l.discount ?? 0) / 100))))
 
@@ -111,8 +280,8 @@ export function printOrder(order) {
       <div class="info-box">
         <h3>Order details</h3>
         <div class="info-line"><span class="il">Order no.</span><span class="iv mono">${esc(order.orderNo)}</span></div>
-        <div class="info-line"><span class="il">Order date</span><span class="iv">${esc(order.orderDate || '-')}</span></div>
-        <div class="info-line"><span class="il">Delivery date</span><span class="iv">${esc(order.deliveryDate || '-')}</span></div>
+        <div class="info-line"><span class="il">Order date</span><span class="iv">${fmtDate(order.orderDate)}</span></div>
+        <div class="info-line"><span class="il">Delivery date</span><span class="iv">${fmtDate(order.deliveryDate)}</span></div>
         <div class="info-line"><span class="il">Ordered qty</span><span class="iv">${fmtN(orderedQty)}</span></div>
         <div class="info-line"><span class="il">Sales qty</span><span class="iv">${fmtN(salesQty)}</span></div>
       </div>
@@ -162,7 +331,9 @@ export function printJobCard(jc) {
         <div class="info-line"><span class="il">Product</span><span class="iv">${esc(jc.productName)}</span></div>
         <div class="info-line"><span class="il">Size</span><span class="iv">${esc(jc.size || '-')}</span></div>
         <div class="info-line"><span class="il">Handle</span><span class="iv">${esc(jc.handle || '-')}</span></div>
+        <div class="info-line"><span class="il">Wt (g)</span><span class="iv">${fmtN(jc.weightGrams || 0)}</span></div>
         <div class="info-line"><span class="il">Qty</span><span class="iv">${fmtN(jc.qty)}</span></div>
+        <div class="info-line"><span class="il">Material req.</span><span class="iv">${Number(jc.materialRequiredKg || 0).toLocaleString('en-IN', { maximumFractionDigits: 3 })} kg</span></div>
       </div>
       <div class="info-box">
         <h3>Order</h3>
@@ -190,15 +361,16 @@ export function printJobCard(jc) {
 
 export function printInvoice(inv) {
   const lines = inv.lines || []
+  const invoiceDiscountPct = discountPctOnInvoiceAmount(inv)
+  const isInterState = inv.taxMode === 'INTER_STATE'
   const rows = lines.map((l, i) => `
     <tr>
       <td>${i + 1}</td>
-      <td><strong>${esc(l.productName)}</strong><br><span style="color:#6A6760;font-size:10px">${esc(l.size)} | ${esc(l.handle)}</span></td>
-      <td class="r">${fmtN(l.orderedQty ?? l.qty)}</td>
+      <td><strong>${esc(l.productName)}</strong><br><span style="color:#6A6760;font-size:10px">HSN: ${esc(l.hsnCode || '-')} | ${esc(l.size)} | ${esc(l.handle)}</span></td>
       <td class="r">${fmtN(l.salesQty ?? l.qty)}</td>
       <td class="r mono">${fmt(l.unitPrice)}</td>
-      <td class="r">${pct(l.discount)}</td>
-      <td class="c">${esc(l.taxPercent)}%</td>
+      <td class="r">${printDiscount(l.discount)}</td>
+      <td class="c">${isInterState ? `${l.taxPercent}% IGST` : `${splitGstPercent(l.taxPercent)}% + ${splitGstPercent(l.taxPercent)}%`}</td>
       <td class="r">${fmt(l.taxAmount)}</td>
       <td class="r"><strong>${fmt(l.lineTotal)}</strong></td>
     </tr>
@@ -211,24 +383,29 @@ export function printInvoice(inv) {
         <h3>Bill to</h3>
         <div class="info-line"><span class="il">Client</span><span class="iv">${esc(inv.clientName)}</span></div>
         <div class="info-line"><span class="il">GSTIN</span><span class="iv mono">${esc(inv.clientGstNo || '-')}</span></div>
+        <div class="info-line"><span class="il">Address</span><span class="iv">${esc(inv.clientAddress || inv.clientBillingAddress || '-')}</span></div>
       </div>
       <div class="info-box">
         <h3>Invoice details</h3>
         <div class="info-line"><span class="il">Invoice no.</span><span class="iv mono">${esc(inv.invoiceNo)}</span></div>
         <div class="info-line"><span class="il">Order ref</span><span class="iv mono">${esc(inv.orderNo || '-')}</span></div>
-        <div class="info-line"><span class="il">Invoice date</span><span class="iv">${esc(inv.invoiceDate || '-')}</span></div>
-        <div class="info-line"><span class="il">Due date</span><span class="iv">${esc(inv.dueDate || '-')}</span></div>
-        <div class="info-line"><span class="il">GST rate</span><span class="iv">${esc(inv.gstPercent)}%</span></div>
+        <div class="info-line"><span class="il">Invoice date</span><span class="iv">${fmtDate(inv.invoiceDate)}</span></div>
+        <div class="info-line"><span class="il">Due date</span><span class="iv">${fmtDate(inv.dueDate)}</span></div>
+        <div class="info-line"><span class="il">Place of supply</span><span class="iv">${esc(inv.placeOfSupply || '-')}</span></div>
+        <div class="info-line"><span class="il">GST rate</span><span class="iv">${isInterState ? `IGST ${esc(inv.igstPercent)}%` : `CGST ${splitGstPercent(inv.gstPercent)}% + SGST ${splitGstPercent(inv.gstPercent)}%`}</span></div>
       </div>
     </div>
     <table>
-      <thead><tr><th>#</th><th>Product</th><th class="r">Ordered</th><th class="r">Sales</th><th class="r">Rate</th><th class="r">Discount</th><th class="c">GST%</th><th class="r">Tax amt</th><th class="r">Line total</th></tr></thead>
+      <thead><tr><th>#</th><th>Product</th><th class="r">Sales</th><th class="r">Rate</th><th class="r">Discount</th><th class="c">GST%</th><th class="r">Tax amt</th><th class="r">Line total</th></tr></thead>
       <tbody>${rows}</tbody>
     </table>
     <div class="totals-wrap"><div class="totals-box">
-      <div class="t-row mut"><span>Discount</span><span>${fmt(inv.discountTotal)}</span></div>
       <div class="t-row mut"><span>Subtotal</span><span>${fmt(inv.subtotal)}</span></div>
-      <div class="t-row mut"><span>GST ${esc(inv.gstPercent)}%</span><span>${fmt(inv.taxTotal)}</span></div>
+      ${isInterState
+        ? `<div class="t-row mut"><span>IGST ${esc(inv.igstPercent)}%</span><span>${fmt(inv.igstAmount)}</span></div>`
+        : `<div class="t-row mut"><span>CGST ${splitGstPercent(inv.gstPercent)}%</span><span>${fmt(inv.cgstAmount)}</span></div>
+      <div class="t-row mut"><span>SGST ${splitGstPercent(inv.gstPercent)}%</span><span>${fmt(inv.sgstAmount)}</span></div>`}
+      <div class="t-row mut"><span>Invoice discount (${invoiceDiscountPct})</span><span>${fmt(inv.invoiceDiscount || 0)}</span></div>
       <div class="t-row big"><span>Invoice total</span><span>${fmt(inv.total)}</span></div>
       <div class="t-row mut"><span>Paid</span><span>${fmt(inv.paidAmount)}</span></div>
       <div class="t-row"><span>Balance due</span><span><strong>${fmt(inv.balanceDue)}</strong></span></div>
@@ -244,13 +421,18 @@ export function printInvoice(inv) {
 
 export function printDeliveryChallan(inv) {
   const lines = inv.lines || []
+  const subtotal = Number(inv.subtotal || 0)
+  const taxTotal = Number(inv.taxTotal || 0)
+  const invoiceDiscount = Number(inv.invoiceDiscount || 0)
+  const grandTotal = Number(inv.total || 0)
+  const isInterState = inv.taxMode === 'INTER_STATE'
   const rows = lines.map((l, i) => `
     <tr>
       <td class="c">${i + 1}</td>
-      <td>${esc(l.productName)}<br><span style="font-size:10px;color:#4B5563">${esc(l.size)} | ${esc(l.handle)}</span></td>
+      <td>${esc(l.productName)}<br><span style="font-size:10px;color:#4B5563">HSN: ${esc(l.hsnCode || '-')} | ${esc(l.size)} | ${esc(l.handle)}</span></td>
       <td class="r">${fmtN(l.salesQty ?? l.qty)}</td>
       <td class="r mono">${fmt(l.unitPrice)}</td>
-      <td class="r">${fmt(l.lineTotal)}</td>
+      <td class="r">${fmt((Number(l.salesQty ?? l.qty ?? 0) * Number(l.unitPrice ?? 0)))}</td>
     </tr>
   `).join('')
 
@@ -268,13 +450,15 @@ export function printDeliveryChallan(inv) {
           <div style="font-weight:700;margin-bottom:6px">M/s.</div>
           <div style="font-size:14px;font-weight:600;margin-bottom:6px">${esc(inv.clientName)}</div>
           <div style="font-size:11px;color:#3B372B">GSTIN: ${esc(inv.clientGstNo || '-')}</div>
+          <div style="font-size:11px;color:#3B372B;margin-top:4px">Place of Supply: ${esc(inv.placeOfSupply || '-')}</div>
+          <div style="font-size:11px;color:#3B372B;margin-top:8px;line-height:1.5">${esc(inv.clientAddress || inv.clientShippingAddress || inv.clientBillingAddress || '-')}</div>
           <div style="font-size:11px;color:#3B372B;margin-top:8px">Order Ref: ${esc(inv.orderNo || '-')}</div>
         </div>
         <div class="challan-box">
           <div class="challan-title">Challan</div>
           <div style="margin-top:14px;font-size:12px;line-height:1.8">
             <div><strong>No.</strong> <span class="mono">${esc(inv.invoiceNo)}</span></div>
-            <div><strong>Date</strong> ${esc(inv.invoiceDate || '-')}</div>
+            <div><strong>Date</strong> ${fmtDate(inv.invoiceDate)}</div>
           </div>
         </div>
       </div>
@@ -282,7 +466,18 @@ export function printDeliveryChallan(inv) {
         <thead><tr><th style="width:50px">No.</th><th>Particulars</th><th style="width:110px">Qty.</th><th style="width:120px">Rate</th><th style="width:130px">Amount</th></tr></thead>
         <tbody>${rows}</tbody>
       </table>
-      <div class="challan-total">Total Qty: ${fmtN(totalQty)}</div>
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:18px;margin-top:10px">
+        <div class="challan-total" style="margin-top:0">Total Qty: ${fmtN(totalQty)}</div>
+        <div style="min-width:280px;font-size:12px">
+          <div style="display:flex;justify-content:space-between;padding:3px 0"><span>Subtotal</span><strong>${fmt(subtotal)}</strong></div>
+          ${isInterState
+            ? `<div style="display:flex;justify-content:space-between;padding:3px 0"><span>IGST ${esc(inv.igstPercent)}%</span><strong>${fmt(inv.igstAmount)}</strong></div>`
+            : `<div style="display:flex;justify-content:space-between;padding:3px 0"><span>CGST ${splitGstPercent(inv.gstPercent)}%</span><strong>${fmt(inv.cgstAmount)}</strong></div>
+          <div style="display:flex;justify-content:space-between;padding:3px 0"><span>SGST ${splitGstPercent(inv.gstPercent)}%</span><strong>${fmt(inv.sgstAmount)}</strong></div>`}
+          <div style="display:flex;justify-content:space-between;padding:3px 0"><span>Invoice discount</span><strong>${fmt(invoiceDiscount)}</strong></div>
+          <div style="display:flex;justify-content:space-between;padding:5px 0 0;margin-top:4px;border-top:2px solid #857748;font-size:15px"><span><strong>Total</strong></span><strong>${fmt(grandTotal)}</strong></div>
+        </div>
+      </div>
       <div style="display:flex;justify-content:space-between;align-items:flex-end;margin-top:28px">
         <div style="font-size:12px;font-weight:700">GST No. ${COMPANY.gst}</div>
         <div style="text-align:right">
@@ -328,15 +523,20 @@ export function printReports(data) {
   const totalCY = clients.reduce((s, c) => s + (c.cyOutstanding || 0), 0)
   const totalPY = clients.reduce((s, c) => s + (c.pyOutstanding || 0), 0)
   const totalPaid = payments.reduce((s, p) => s + (p.amount || 0), 0)
-  const totalOrderVal = orders.reduce((s, o) => s + (o.subtotal || 0), 0)
-  const orderRows = orders.map((o, i) => `<tr><td>${i + 1}</td><td class="mono">${esc(o.orderNo)}</td><td>${esc(o.clientName)}</td><td>${esc(o.orderDate || '-')}</td><td>${esc(o.status)}</td><td class="r">${fmt(o.subtotal)}</td></tr>`).join('')
+  const totalInvoiceVal = invoices.reduce((s, i) => s + (i.total || 0), 0)
+  const invoiceAmountByOrderId = invoices.reduce((acc, inv) => {
+    if (inv.orderId == null) return acc
+    acc[inv.orderId] = (acc[inv.orderId] || 0) + (inv.total || 0)
+    return acc
+  }, {})
+  const orderRows = orders.map((o, i) => `<tr><td>${i + 1}</td><td class="mono">${esc(o.orderNo)}</td><td>${esc(o.clientName)}</td><td>${esc(o.orderDate || '-')}</td><td>${esc(o.status)}</td><td class="r">${fmt(invoiceAmountByOrderId[o.id] || 0)}</td></tr>`).join('')
 
   open(`
     ${companyHeader('Business Report')}
     <div class="info-row">
       <div class="info-box">
         <h3>Summary</h3>
-        <div class="info-line"><span class="il">Total order value</span><span class="iv">${fmt(totalOrderVal)}</span></div>
+        <div class="info-line"><span class="il">Total invoice value</span><span class="iv">${fmt(totalInvoiceVal)}</span></div>
         <div class="info-line"><span class="il">Payments received</span><span class="iv">${fmt(totalPaid)}</span></div>
         <div class="info-line"><span class="il">PY outstanding</span><span class="iv">${fmt(totalPY)}</span></div>
         <div class="info-line"><span class="il">CY outstanding</span><span class="iv">${fmt(totalCY)}</span></div>
@@ -350,7 +550,7 @@ export function printReports(data) {
       </div>
     </div>
     <table>
-      <thead><tr><th>#</th><th>Order</th><th>Client</th><th>Date</th><th>Status</th><th class="r">Value</th></tr></thead>
+      <thead><tr><th>#</th><th>Order</th><th>Client</th><th>Date</th><th>Status</th><th class="r">Invoice amount</th></tr></thead>
       <tbody>${orderRows || '<tr><td colspan="6" class="c">No orders</td></tr>'}</tbody>
     </table>
   `)
@@ -450,4 +650,26 @@ export function printClientLedger(client, ledger, totalDebits, totalCredits, clo
       <tbody>${rows || '<tr><td colspan="7" class="c">No ledger rows</td></tr>'}</tbody>
     </table>
   `)
+}
+
+export function downloadClientLedgerPdf(client, ledger, totalDebits, totalCredits, closingBalance) {
+  const pages = ledgerPdfPages(client, ledger, totalDebits, totalCredits, closingBalance)
+  const pdfBlob = buildSimplePdf(pages)
+  downloadFile(pdfBlob, `${slug(client.name)}-ledger.pdf`)
+}
+
+export function shareClientLedgerOnWhatsApp(client, ledger, totalDebits, totalCredits, closingBalance) {
+  const invoiceCount = (ledger || []).filter(row => row.type === 'invoice').length
+  const paymentCount = (ledger || []).filter(row => row.type === 'payment').length
+  const text = [
+    `Client Ledger Summary`,
+    `Client: ${client.name}`,
+    `Code: ${client.code || '-'}`,
+    `Total Invoices: ${invoiceCount}`,
+    `Total Payments: ${paymentCount}`,
+    `Total Debits: ${fmt(totalDebits)}`,
+    `Total Credits: ${fmt(totalCredits)}`,
+    `Closing Balance: ${fmt(closingBalance)}`,
+  ].join('\n')
+  window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, '_blank', 'noopener,noreferrer')
 }

@@ -7,6 +7,8 @@ export default function Products() {
   const [products, setProducts] = useState([])
   const [loading, setLoading] = useState(true)
   const [modal, setModal] = useState(null)
+  const [query, setQuery] = useState('')
+  const [statusFilter, setStatusFilter] = useState('ALL')
 
   useEffect(() => { getProducts().then(setProducts).finally(() => setLoading(false)) }, [])
 
@@ -18,26 +20,51 @@ export default function Products() {
 
   if (loading) return <Spinner />
 
+  const filteredProducts = products.filter(p => {
+    const matchesQuery = !query.trim() || [p.sku, p.name, p.category, p.size, p.hsnCode, p.handle]
+      .some(value => String(value || '').toLowerCase().includes(query.trim().toLowerCase()))
+    const matchesStatus = statusFilter === 'ALL' || p.status === statusFilter
+    return matchesQuery && matchesStatus
+  })
+
   return (
     <div className="page">
       <div className="page-header">
         <h1 className="page-title">Products</h1>
         <button className="btn btn-primary" onClick={() => setModal(true)}>+ New product</button>
       </div>
+      <div className="card" style={{ marginBottom: 14 }}>
+        <div className="form-grid">
+          <div className="field">
+            <label>Search</label>
+            <input value={query} onChange={e => setQuery(e.target.value)} placeholder="SKU, name, category, size" />
+          </div>
+          <div className="field">
+            <label>Status</label>
+            <select value={statusFilter} onChange={e => setStatusFilter(e.target.value)}>
+              <option value="ALL">All</option>
+              <option value="ACTIVE">Active</option>
+              <option value="INACTIVE">Inactive</option>
+            </select>
+          </div>
+        </div>
+      </div>
       <div className="card" style={{ padding: 0 }}>
         <div className="table-wrap">
           <table className="data-table">
             <thead>
-              <tr><th>SKU</th><th>Name</th><th>Category</th><th>Size</th><th>Handle</th><th>UOM</th><th>Base price</th><th>Status</th><th></th></tr>
+              <tr><th>SKU</th><th>Name</th><th>Category</th><th>Size</th><th>HSN</th><th>Handle</th><th>Wt (g)</th><th>UOM</th><th>Base price</th><th>Status</th><th></th></tr>
             </thead>
             <tbody>
-              {products.map(p => (
+              {filteredProducts.map(p => (
                 <tr key={p.id}>
                   <td className="mono">{p.sku}</td>
                   <td style={{ fontWeight: 500 }}>{p.name}</td>
                   <td><span className="tag">{p.category}</span></td>
                   <td className="text-muted">{p.size}</td>
+                  <td className="mono">{p.hsnCode || '-'}</td>
                   <td><span className="tag">{p.handle}</span></td>
+                  <td className="mono">{Number(p.weightGrams || 0).toLocaleString('en-IN', { maximumFractionDigits: 3 })}</td>
                   <td className="text-muted">{p.uom}</td>
                   <td className="mono" style={{ fontWeight: 600 }}>{fmt(p.basePrice)}</td>
                   <td><Badge status={p.status} /></td>
@@ -55,17 +82,17 @@ export default function Products() {
 
 function ProductModal({ initial, onSave, onClose }) {
   const [form, setForm] = useState({
-    sku: '', name: '', category: '', size: '', handle: 'None', uom: 'Pcs', basePrice: '', status: 'ACTIVE',
+    sku: '', name: '', category: '', size: '', hsnCode: '', handle: 'None', uom: 'Pcs', basePrice: '', weightGrams: '', status: 'ACTIVE',
     ...initial,
   })
   const [saving, setSaving] = useState(false)
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }))
 
   const save = async () => {
-    if (!form.sku || !form.name) { toast.error('SKU and name are required'); return }
+    if (!form.sku || !form.name || !form.hsnCode) { toast.error('SKU, name and HSN code are required'); return }
     setSaving(true)
     try {
-      const payload = { ...form, basePrice: parseFloat(form.basePrice) || 0 }
+      const payload = { ...form, basePrice: parseFloat(form.basePrice) || 0, weightGrams: parseFloat(form.weightGrams) || 0 }
       const result = initial?.id ? await updateProduct(initial.id, payload) : await createProduct(payload)
       onSave(result)
     } finally { setSaving(false) }
@@ -78,11 +105,13 @@ function ProductModal({ initial, onSave, onClose }) {
         <div className="field"><label>Product name *</label><input value={form.name} onChange={e => set('name', e.target.value)} /></div>
         <div className="field"><label>Category</label><input value={form.category || ''} onChange={e => set('category', e.target.value)} /></div>
         <div className="field"><label>Size</label><input value={form.size || ''} onChange={e => set('size', e.target.value)} placeholder="e.g. 12x15 inch" /></div>
+        <div className="field"><label>HSN code *</label><input value={form.hsnCode || ''} onChange={e => set('hsnCode', e.target.value)} placeholder="4 or 6 digit HSN" /></div>
         <div className="field"><label>Handle</label>
           <select value={form.handle} onChange={e => set('handle', e.target.value)}>
             <option>Loop</option><option>D-cut</option><option>None</option><option>Other</option>
           </select>
         </div>
+        <div className="field"><label>Wt (in grams)</label><input type="number" step="0.001" min="0" value={form.weightGrams || ''} onChange={e => set('weightGrams', e.target.value)} /></div>
         <div className="field"><label>UOM</label>
           <select value={form.uom} onChange={e => set('uom', e.target.value)}>
             <option>Pcs</option><option>Kg</option><option>Bundle</option>

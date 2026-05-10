@@ -19,6 +19,14 @@ export const getClients      = ()       => api.get('/clients').then(r => r.data)
 export const getClient       = id       => api.get(`/clients/${id}`).then(r => r.data)
 export const createClient    = data     => api.post('/clients', data).then(r => r.data)
 export const updateClient    = (id, d)  => api.put(`/clients/${id}`, d).then(r => r.data)
+export const uploadClientDesign = async (id, file) => {
+  const form = new FormData()
+  form.append('file', file)
+  const res = await api.post(`/clients/${id}/design`, form, {
+    headers: { 'Content-Type': 'multipart/form-data' }
+  })
+  return res.data
+}
 
 // Client Products
 export const getClientProducts    = id           => api.get(`/clients/${id}/products`).then(r => r.data)
@@ -52,10 +60,15 @@ export const deleteActivity       = (jcId, actId)  => api.delete(`/jobcards/${jc
 export const getInvoices    = ()       => api.get('/invoices').then(r => r.data)
 export const getInvoice     = id       => api.get(`/invoices/${id}`).then(r => r.data)
 export const createInvoice  = data     => api.post('/invoices', data).then(r => r.data)
+export const updateInvoice  = (id, d)  => api.put(`/invoices/${id}`, d).then(r => r.data)
 
 // Payments
 export const getPayments    = ()       => api.get('/payments').then(r => r.data)
 export const createPayment  = data     => api.post('/payments', data).then(r => r.data)
+
+// Expenses
+export const getExpenses    = ()       => api.get('/expenses').then(r => r.data)
+export const createExpense  = data     => api.post('/expenses', data).then(r => r.data)
 
 // AI Chat
 export const sendChat = data => api.post('/ai/chat', data).then(r => r.data)
@@ -71,15 +84,37 @@ export const deleteOrder = (id) =>
 
 
 
-export const loginApi = (username, password) =>
-  fetch('/api/auth/login', {
+export const loginApi = async (username, password) => {
+  const r = await fetch('/api/auth/login', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
       username: username,
       password: password
     })
-  }).then(r => r.json())
+  })
+
+  const text = await r.text()
+  let data = null
+
+  if (text) {
+    try {
+      data = JSON.parse(text)
+    } catch {
+      throw new Error(`Login failed (${r.status}). Server returned a non-JSON response.`)
+    }
+  }
+
+  if (!r.ok) {
+    throw new Error(data?.message || `Login failed (${r.status})`)
+  }
+
+  if (!data) {
+    throw new Error(`Login failed (${r.status}). Empty response from server.`)
+  }
+
+  return data
+}
 
 export const logoutApi = () =>
   fetch('/api/auth/logout', {

@@ -6,7 +6,7 @@ export const ROLE_PERMISSIONS = {
   ADMIN: {
     label: 'Administrator',
     color: '#6D28D9', bg: '#F5F3FF',
-    pages: ['dashboard','clients','products','orders','jobcards','invoices','payments','reports','users'],
+    pages: ['dashboard','clients','products','orders','jobcards','invoices','payments','expenses','reports','users'],
     canEdit: true, canViewRates: true, canViewAmounts: true,
     canPrint: true, canCreateOrder: true, canCreateInvoice: true,
     canRecordPayment: true, canManageUsers: true, aiChat: true,
@@ -14,7 +14,7 @@ export const ROLE_PERMISSIONS = {
   SALES: {
     label: 'Sales',
     color: '#1D4ED8', bg: '#EFF6FF',
-    pages: ['dashboard','clients','products','orders','jobcards','invoices','payments','reports'],
+    pages: ['dashboard','clients','products','orders','jobcards','invoices','payments','expenses','reports'],
     canEdit: true, canViewRates: true, canViewAmounts: true,
     canPrint: true, canCreateOrder: true, canCreateInvoice: true,
     canRecordPayment: true, canManageUsers: false, aiChat: true,

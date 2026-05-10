@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import toast from 'react-hot-toast'
 import { getJobCards, getJobCard, updateJobCardStatus, addActivity } from '../api/client'
-import { Badge, Modal, DetailRow, Pipeline, fmtN, Spinner, PrintIcon } from '../components/UI'
+import { Badge, Modal, DetailRow, Pipeline, fmtN, Spinner, PrintIcon, formatDateDisplay } from '../components/UI'
 import { printJobCard } from '../components/PrintTemplates'
 import { useAuth } from '../auth/AuthContext'
 
@@ -94,7 +94,7 @@ export function OperatorJobCardsList() {
                         {jc.handle && jc.handle !== 'None' && <span className="tag">{jc.handle}</span>}
                       </div>
                       <div style={{ marginTop: 3, fontSize: 11, color: 'var(--ink2)' }}>
-                        {jc.clientName} &nbsp;·&nbsp; {fmtN(jc.qty)} pcs &nbsp;·&nbsp; Due: <strong>{jc.dueDate}</strong>
+                        {jc.clientName} &nbsp;·&nbsp; {fmtN(jc.qty)} pcs &nbsp;·&nbsp; Due: <strong>{formatDateDisplay(jc.dueDate)}</strong>
                       </div>
                     </div>
                     <div style={{ textAlign: 'right', flexShrink: 0 }}>
@@ -259,7 +259,7 @@ export function OperatorJobCardDetail() {
           <DetailRow label="Start date" value={jc.startDate} />
           <DetailRow label="Due date" value={
             <span style={{ fontWeight: 600, color: new Date(jc.dueDate) < new Date() ? 'var(--red)' : undefined }}>
-              {jc.dueDate}
+              {formatDateDisplay(jc.dueDate)}
             </span>
           } />
           <DetailRow label="Status" value={<Badge status={jc.status} />} />

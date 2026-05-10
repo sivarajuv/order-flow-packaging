@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { getDashboard } from '../api/client'
-import { Badge, fmt, Pipeline, Spinner } from '../components/UI'
+import { Badge, fmt, Pipeline, Spinner, formatDateDisplay } from '../components/UI'
 
 export default function Dashboard() {
   const [data, setData] = useState(null)
@@ -15,7 +15,7 @@ export default function Dashboard() {
       <div className="page-header">
         <h1 className="page-title">Dashboard</h1>
         <span className="text-muted text-small">
-          {new Date().toLocaleDateString('en-IN', { dateStyle: 'long' })}
+          {formatDateDisplay(new Date().toISOString().slice(0, 10))}
         </span>
       </div>
 
@@ -94,7 +94,7 @@ export default function Dashboard() {
                     <tr key={inv.id} className="clickable" onClick={() => nav(`/invoices/${inv.id}`)}>
                       <td className="mono">{inv.invoiceNo}</td>
                       <td>{inv.clientName}</td>
-                      <td className="text-muted text-small">{inv.dueDate}</td>
+                      <td className="text-muted text-small">{formatDateDisplay(inv.dueDate)}</td>
                       <td className="r fw-600" style={{ color: 'var(--amber)' }}>{fmt(inv.balanceDue)}</td>
                     </tr>
                   ))}
